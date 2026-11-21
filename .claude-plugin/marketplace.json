@@ -1,0 +1,11 @@
+{
+  "name": "thread-queue",
+  "owner": { "name": "Rule 0 Softworks" },
+  "plugins": [
+    {
+      "name": "thread-queue-turnstile",
+      "source": "./",
+      "description": "Milestone 0 test build of the Thread Queue gate."
+    }
+  ]
+}
