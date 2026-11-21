@@ -69,7 +69,7 @@ TypeScript rules:
 - Node only removes the types, so use only syntax that can be removed: no enums, no namespaces, no parameter properties.
 - Import other files by their `.ts` name.
 - Do not commit compiled `.js` files.
-- `typescript` and `vitest` are development dependencies only. The plugin needs neither at run time.
+- `typescript` and `@types/node` are development dependencies only. The plugin needs neither at run time.
 
 ## Gate rules
 
@@ -99,7 +99,6 @@ Run `npm test` (Node's built-in test runner, files named `*.test.ts`) and `npm r
 |---|---|---|
 | `install` | `npm ci` | |
 | `format` | Not defined yet | Added by `RUL-3166` |
-| `type check` | Not defined yet | `RUL-3166` adds it. Planned: `tsc --noEmit`. |
 | `lint` | Not defined yet | `RUL-3166` plans a plugin manifest check. There is no manifest to check today. |
 | `typecheck` | `npm run typecheck` | Runs `tsc`, emits nothing |
 | `test` | `npm test` | Runs `node --test` |
