@@ -84,7 +84,7 @@ These are the product. Do not change one without a Linear issue that says so.
 
 ## Setup commands
 
-Node 24 or later. Install with `npm ci`. Node runs TypeScript files directly, so there is no build step.
+Node 24.22.3 or later (pinned in `.nvmrc`). Install with `npm ci`. Node runs TypeScript files directly, so there is no build step.
 
 ## Development workflow
 
