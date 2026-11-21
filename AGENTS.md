@@ -69,7 +69,7 @@ TypeScript rules:
 - Node only removes the types, so use only syntax that can be removed: no enums, no namespaces, no parameter properties.
 - Import other files by their `.ts` name.
 - Do not commit compiled `.js` files.
-- `typescript` is the only development dependency.
+- `typescript` and `vitest` are development dependencies only. The plugin needs neither at run time.
 
 ## Gate rules
 
@@ -91,7 +91,7 @@ Not defined yet. The plugin has no build step. `RUL-3169` defines the command th
 
 ## Testing instructions
 
-Not defined yet. `RUL-3166` picks the test command. Required coverage, from `RUL-3167`: one test for each gate rule above.
+Not defined yet. The test runner is Vitest. `RUL-3166` adds the test command. Required coverage, from `RUL-3167`: one test for each gate rule above.
 
 ## Verification commands
 

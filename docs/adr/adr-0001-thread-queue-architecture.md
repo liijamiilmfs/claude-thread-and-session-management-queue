@@ -75,7 +75,7 @@ Language: TypeScript (CTX-016).
 
 - The plugin's `.ts` files are run directly by Node, which removes the types as it loads each file (CTX-017). The plugin has no build step and no compiled files are committed.
 - Because Node only removes types, the plugin uses only TypeScript syntax that can be removed: no enums, no namespaces and no parameter properties. Imports name the `.ts` file.
-- `tsc --noEmit` is the type check. The `typescript` package is the only development dependency.
+- `tsc --noEmit` is the type check. Tests run on Vitest. `typescript` and `vitest` are development dependencies only. The plugin needs neither at run time.
 - A browser cannot run TypeScript, so the board's script is compiled with `tsc` when the board is published. The compiled file is published beside the page and is not committed.
 
 Rationale: the hook is code and runs whether or not the agent remembers, which meets CTX-014. The agent is still the only party that knows the title, project and state (CTX-008), so it fills in the label while the hook holds the gate. Nothing is hosted, no network rule changes, and no secret is stored.
