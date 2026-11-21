@@ -47,6 +47,8 @@ Planned: one setting, the board's address. With no address set, the turnstile do
 
 ## Development
 
+The code will be TypeScript. Node runs the plugin's files directly, so the plugin has no build step.
+
 Agent and contributor rules are in `AGENTS.md`. Install and test commands arrive with the plugin skeleton. There are none today.
 
 ## Project layout

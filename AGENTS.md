@@ -15,7 +15,7 @@ Thread Queue gives Josh one list of his Claude cloud project threads across all 
 - **The board**: one private Artifact page with a small built-in database. One row per finished turn.
 - **The turnstile**: a Claude Code plugin whose hooks block a thread from ending a turn in which it told the person something, until the thread has written its row to the board.
 
-Plain JavaScript run by Node. No build step.
+TypeScript. Plain JavaScript is not acceptable. Node runs the plugin's `.ts` files directly, so the plugin has no build step. The board's script is compiled with `tsc` when the board is published.
 
 Status: planning. The repository has no code yet. Do not write code until Milestone 0 is done and `docs/adr/adr-0001-thread-queue-architecture.md` is Accepted. A working prototype from 2026-11-21 sits outside the repository, in the Claude project's shared folder under `thread-queue/prototype/`.
 
@@ -46,23 +46,31 @@ Planned plugin files, one per role:
 
 | File | Role |
 |---|---|
-| `hooks/gate.js` | Composition Root |
-| `src/controller.js` | Controller |
-| `src/service.js` | Service |
-| `src/manager.js` | Manager |
-| `src/connector.js` | Connector |
-| `src/model.js` | Model |
+| `hooks/gate.ts` | Composition Root |
+| `src/controller.ts` | Controller |
+| `src/service.ts` | Service |
+| `src/manager.ts` | Manager |
+| `src/connector.ts` | Connector |
+| `src/model.ts` | Model |
 
-The board is one file, `board/index.html`. Its sections are marked by comments naming the role: Client, Service, Connector, Transformer, Model.
+The board is a page, `board/index.html` (markup and styles only), and one script, `board/board.ts`. The script's sections are marked by comments naming the role: Client, Service, Connector, Transformer, Model.
 
 Rules a reviewer checks:
 
-- `src/service.js` holds every gate rule. It does no file or network access, and reads no clock and no environment. Time and the board address are passed in.
-- Only `src/connector.js` touches the note file.
-- `src/service.js` never imports `src/connector.js`. It reaches storage through `src/manager.js`.
-- Only `hooks/gate.js` reads the environment and standard input.
+- `src/service.ts` holds every gate rule. It does no file or network access, and reads no clock and no environment. Time and the board address are passed in.
+- Only `src/connector.ts` touches the note file.
+- `src/service.ts` never imports `src/connector.ts`. It reaches storage through `src/manager.ts`.
+- Only `hooks/gate.ts` reads the environment and standard input.
 - On the board, only the Connector section calls the page database, and only the Client section touches the document.
 - Do not add a role, a folder, a dependency or a hosted service the ADR does not name. Change the ADR first.
+
+TypeScript rules:
+
+- Node only removes the types, so use only syntax that can be removed: no enums, no namespaces, no parameter properties.
+- Import other files by their `.ts` name.
+- Do not commit compiled `.js` files.
+- `typescript` and `@types/node` are development dependencies only. The plugin needs neither at run time.
+- Run everything on Node 24.22.3: tests, the type check and the hooks. Do not rely on a machine's default `node`.
 
 ## Gate rules
 
@@ -80,7 +88,7 @@ Node 24 or later. Install with `npm ci`. Node runs TypeScript files directly, so
 
 ## Development workflow
 
-Not defined yet. No build step is planned.
+Not defined yet. The plugin has no build step. `RUL-3169` defines the command that compiles the board's script at publish time.
 
 ## Testing instructions
 
@@ -136,3 +144,4 @@ Keep scratch files out of the repository. Commit nothing generated.
 - A thread ends a turn with no row: check that the plugin is switched on for that project and that the board address is set. With no address the gate does nothing by design.
 - A thread reports the gate blocked it twice and then let it go: the row write failed twice. Open the board and check that it loads.
 - A hook seems not to fire: open the hooks menu in the session to see which hooks are registered.
+- A hook fails with a syntax error on a `.ts` file: it ran on the wrong Node. The project's version is 24.22.3. A thread's machine may have an older default `node`. Check which `node` the hook command runs.
