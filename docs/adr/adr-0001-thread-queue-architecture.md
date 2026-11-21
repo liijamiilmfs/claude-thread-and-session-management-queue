@@ -39,12 +39,14 @@ Facts observed in one cloud project thread on 2026-11-21. These are test results
 - **CTX-010**: A private Artifact page with a built-in database showed rows live. A thread wrote a row to it with the `ArtifactData` tool and no approval prompt, in auto permission mode.
 - **CTX-011**: The same page could not list sessions itself. Claude's permission box reported "Couldn't load this connector" for the built-in session connector.
 - **CTX-012**: An account plugin's hooks (Ponytail) ran in the thread.
+- **CTX-017**: Node v22.23.5 on the thread's machine ran a `.ts` file that imports another `.ts` file, directly, with no flag and no build step. Node reported `process.features.typescript` as `strip`. TypeScript 6.0.2 (`tsc`) was also installed there.
 
 Josh's decisions on 2026-11-21:
 
 - **CTX-013**: Cloud project threads only. The desktop app already sorts local sessions by status.
 - **CTX-014**: Reporting must be enforced by code. An instruction that asks threads to report is not acceptable, because agents skip instructions.
 - **CTX-015**: The turnstile design below, chosen over continued search for a route with no agent step.
+- **CTX-016**: The code is TypeScript. Plain JavaScript is not acceptable.
 
 Rule 0 Softworks requires each repository to adopt the Software Layer Roles and Dependency Policy through a scope-adoption ADR. This record is that ADR for this repository.
 
@@ -56,7 +58,7 @@ Two parts.
 
 **The board** is one private Artifact page, pinned in Claude. It keeps a small database of rows, one per finished turn. It shows the newest row of each thread: Priority on top (finished turns Josh has not clicked), then the rest grouped by day. Each row shows the thread title, project name, state and a short preview, and links to the thread. Clicking a row marks it seen.
 
-**The turnstile** is a plugin with two command hooks that run one small Node script.
+**The turnstile** is a plugin with two command hooks that run one small TypeScript program on Node.
 
 - After each tool call, the script notes two things in a small file in the thread's scratch folder: the thread told the person something (a row is owed), and a valid row was written.
 - When the thread tries to end its turn, the script checks the note. If a row is owed and not written, it blocks the turn and hands back the exact row to write, with the thread id, time and link filled in. The thread adds its title, project, state and preview, writes the row, and the turn ends.
@@ -69,7 +71,12 @@ Rules:
 - With no board address set, the script does nothing.
 - States are needs you, ready for review, finished and failed.
 
-Language: plain JavaScript run by Node, with no build step.
+Language: TypeScript (CTX-016).
+
+- The plugin's `.ts` files are run directly by Node, which removes the types as it loads each file (CTX-017). The plugin has no build step and no compiled files are committed.
+- Because Node only removes types, the plugin uses only TypeScript syntax that can be removed: no enums, no namespaces and no parameter properties. Imports name the `.ts` file.
+- `tsc --noEmit` is the type check. The `typescript` package is the only development dependency.
+- A browser cannot run TypeScript, so the board's script is compiled with `tsc` when the board is published. The compiled file is published beside the page and is not committed.
 
 Rationale: the hook is code and runs whether or not the agent remembers, which meets CTX-014. The agent is still the only party that knows the title, project and state (CTX-008), so it fills in the label while the hook holds the gate. Nothing is hosted, no network rule changes, and no secret is stored.
 
@@ -80,8 +87,8 @@ Rationale: the hook is code and runs whether or not the agent remembers, which m
 | Policy | Software Layer Roles and Dependency Policy, `R0S-ARCH-LAYERS`, version `2.0.0-rc.4` |
 | Immutable artifact identifier | File `docs/architecture/software-layers-v2.0.0-rc.4.md` in `Rule-0-Softworks/rule-0-softworks-platform` at commit `32e4c1c548d3bbef05dd66460f72536cf5253872`, SHA-256 `84f1792b0a3b583cfd0486aa5e40e31fd71e542d2d88f6bf8e88d610155b6fcd` |
 | Previously Active policy | None. This is a new repository. |
-| Governed scopes | `hooks/gate.js`, every file under `src/`, and `board/index.html` |
-| Exclusions | Test files (`*.test.js`), JSON manifests and config, and documentation |
+| Governed scopes | `hooks/gate.ts`, every file under `src/`, and `board/board.ts` |
+| Exclusions | Test files (`*.test.ts`), JSON manifests and config, and documentation |
 | Adoption owner | Josh |
 | Approval date | Pending |
 | Classification record | Section 3 of this record |
@@ -99,16 +106,16 @@ The plugin has one file per role. The file name is the classification rule.
 
 | File | Role | What lives there |
 |---|---|---|
-| `hooks/gate.js` | Composition Root | Reads the hook event, the board address and the time, builds the parts, runs the Controller, exits |
-| `src/controller.js` | Controller | Turns a hook event into one call on the Service, and the answer into hook output |
-| `src/service.js` | Service | The gate rules and the wording of the row instruction |
-| `src/manager.js` | Manager | Load and save the gate's note |
-| `src/connector.js` | Connector | The only code that touches the note file |
-| `src/model.js` | Model | The shapes of a hook event, the note and a decision |
+| `hooks/gate.ts` | Composition Root | Reads the hook event, the board address and the time, builds the parts, runs the Controller, exits |
+| `src/controller.ts` | Controller | Turns a hook event into one call on the Service, and the answer into hook output |
+| `src/service.ts` | Service | The gate rules and the wording of the row instruction |
+| `src/manager.ts` | Manager | Load and save the gate's note |
+| `src/connector.ts` | Connector | The only code that touches the note file |
+| `src/model.ts` | Model | The shapes of a hook event, the note and a decision |
 
-The board is one file, so its parts are classified by section. Each section starts with a comment naming its role.
+The board is a page, `board/index.html`, that holds markup and styles only, and one script, `board/board.ts`. The script is one file, so its parts are classified by section. Each section starts with a comment naming its role.
 
-| Section of `board/index.html` | Role | What lives there |
+| Section of `board/board.ts` | Role | What lives there |
 |---|---|---|
 | Client | Client | Drawing rows, the click handler, status text |
 | Service | Service | Newest row per thread, Priority rule, day grouping |
@@ -136,7 +143,7 @@ The Composition Root passes the Manager into the Service and the Connector into 
 | Facility | Mapping | Who may call it |
 |---|---|---|
 | Hook event on standard input, hook output on standard output, exit code | Framework inbound handling and response writing | Composition Root and Controller |
-| Node file system calls for the note file | External Connector facility | `src/connector.js` only |
+| Node file system calls for the note file | External Connector facility | `src/connector.ts` only |
 | Process environment and the system clock | External Provider abstraction | Composition Root only. Values are passed in. |
 | The page database (`claude.use("db")`) | External Connector facility | The board's Connector section only |
 | The browser document | Framework response writing | The board's Client section only |
@@ -160,9 +167,10 @@ The row write itself is not this repository's code. The thread's agent makes it 
 - **NEG-002**: The label is only as good as what the agent writes. The hook checks that the fields exist, not that they are true.
 - **NEG-003**: Every turn that tells Josh something costs one extra tool call.
 - **NEG-004**: The plugin path, the other permission modes and the row link are proven in one thread only or not at all. The design depends on Milestone 0.
-- **NEG-005**: The design rests partly on observed behavior (CTX-006 to CTX-012). Anthropic may change it without notice.
+- **NEG-005**: The design rests partly on observed behavior (CTX-006 to CTX-012 and CTX-017). Anthropic may change it without notice.
 - **NEG-006**: A row leaves Priority when Josh clicks it on the board, not when he opens the thread some other way.
 - **NEG-007**: Six files for about sixty lines of gate code is more structure than the code needs. This is the cost of following the layers policy.
+- **NEG-008**: The plugin depends on the thread machine's Node being able to run TypeScript files. That is observed, not promised (CTX-017). On an older Node the hook would fail, the gate would not block, and turns would go unreported with no visible error.
 
 ## Alternatives Considered
 
@@ -196,10 +204,15 @@ The row write itself is not this repository's code. The thread's agent makes it 
 - **ALT-011**: **Description**: Each project's thread list and its finish notifications.
 - **ALT-012**: **Rejection Reason**: Both are per project. Checking five projects one by one is the problem this tool exists to remove.
 
-### TypeScript
+### Plain JavaScript
 
-- **ALT-013**: **Description**: Write the gate in TypeScript.
-- **ALT-014**: **Rejection Reason**: The gate is about sixty lines. TypeScript would add a build step, or tie the plugin to a Node version that strips types. Revisit if the code grows.
+- **ALT-013**: **Description**: Write the gate and the board in plain JavaScript, as the prototype is.
+- **ALT-014**: **Rejection Reason**: Josh requires TypeScript (CTX-016).
+
+### TypeScript compiled to JavaScript before install
+
+- **ALT-015**: **Description**: Compile the plugin with `tsc` and commit the compiled files, so the hooks run plain JavaScript.
+- **ALT-016**: **Rejection Reason**: A plugin installs straight from the repository with no build on install, so the compiled files would have to be committed and kept in step with the source by hand. Node on the thread's machine already runs the `.ts` files (CTX-017). Revisit if Milestone 0 shows a thread whose Node cannot.
 
 ## Implementation Notes
 
@@ -210,7 +223,7 @@ The row write itself is not this repository's code. The thread's agent makes it 
 - **IMP-005**: The board removes rows older than 30 days. Its database holds at most 25,000 rows.
 - **IMP-006**: Work is assigned under the Agent Routing and Capacity Contract v0.9. Josh approves each issue and its tier before work starts. Agents do not merge pull requests. A Haiku worker makes all Linear writes from an exact spec.
 - **IMP-007**: Success is the Milestone 2 check: threads in at least three projects finish turns within the same few minutes and all show on the board, and one week of use gives a count of missed turns.
-- **IMP-008**: A working prototype of the gate script and the board page from 2026-11-21 is in the project folder under `thread-queue/prototype/`.
+- **IMP-008**: A working prototype of the gate script and the board page from 2026-11-21 is in the project folder under `thread-queue/prototype/`. It is plain JavaScript and predates CTX-016. The Milestone 0 plugin test runs a TypeScript port of the gate, so the test also proves CTX-017 in a second project.
 
 ## References
 
