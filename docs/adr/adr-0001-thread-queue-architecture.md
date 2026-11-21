@@ -39,7 +39,7 @@ Facts observed in one cloud project thread on 2026-11-21. These are test results
 - **CTX-010**: A private Artifact page with a built-in database showed rows live. A thread wrote a row to it with the `ArtifactData` tool and no approval prompt, in auto permission mode.
 - **CTX-011**: The same page could not list sessions itself. Claude's permission box reported "Couldn't load this connector" for the built-in session connector.
 - **CTX-012**: An account plugin's hooks (Ponytail) ran in the thread.
-- **CTX-017**: Node v22.23.5 on the thread's machine ran a `.ts` file that imports another `.ts` file, directly, with no flag and no build step. Node reported `process.features.typescript` as `strip`. TypeScript 6.0.2 (`tsc`) was also installed there.
+- **CTX-017**: The thread's machine had Node v24.22.3 at `/opt/node24/bin/node`. Run with it, a `.ts` file that imports another `.ts` file ran directly, with no flag and no build step, and Node reported `process.features.typescript` as `strip`. The machine's default `node` command was an older version, which this project does not use.
 
 Josh's decisions on 2026-11-21:
 
@@ -47,6 +47,7 @@ Josh's decisions on 2026-11-21:
 - **CTX-014**: Reporting must be enforced by code. An instruction that asks threads to report is not acceptable, because agents skip instructions.
 - **CTX-015**: The turnstile design below, chosen over continued search for a route with no agent step.
 - **CTX-016**: The code is TypeScript. Plain JavaScript is not acceptable.
+- **CTX-018**: The project's Node version is 24.22.3, the version Josh runs locally. `.nvmrc` says 24.22.3 and `package.json` requires 24.22.3 or newer. Tests and hooks run on that version, not on whatever a machine has by default.
 
 Rule 0 Softworks requires each repository to adopt the Software Layer Roles and Dependency Policy through a scope-adoption ADR. This record is that ADR for this repository.
 
@@ -73,9 +74,10 @@ Rules:
 
 Language: TypeScript (CTX-016).
 
-- The plugin's `.ts` files are run directly by Node, which removes the types as it loads each file (CTX-017). The plugin has no build step and no compiled files are committed.
+- The plugin's `.ts` files are run directly by Node 24.22.3 (CTX-018), which removes the types as it loads each file (CTX-017). The plugin has no build step and no compiled files are committed.
 - Because Node only removes types, the plugin uses only TypeScript syntax that can be removed: no enums, no namespaces and no parameter properties. Imports name the `.ts` file.
 - `tsc`, set to emit nothing, is the type check (`npm run typecheck`). Tests run on Node's built-in test runner (`npm test`). `typescript` and `@types/node` are development dependencies only. The plugin needs neither at run time.
+- The hooks must not run on a machine's default Node. How a hook reaches Node 24.22.3 on a thread's machine is settled by Milestone 0, check 1. The candidate is the path seen in CTX-017. On any other version the gate does nothing.
 - A browser cannot run TypeScript, so the board's script is compiled with `tsc` when the board is published. The compiled file is published beside the page and is not committed.
 
 Rationale: the hook is code and runs whether or not the agent remembers, which meets CTX-014. The agent is still the only party that knows the title, project and state (CTX-008), so it fills in the label while the hook holds the gate. Nothing is hosted, no network rule changes, and no secret is stored.
@@ -170,7 +172,7 @@ The row write itself is not this repository's code. The thread's agent makes it 
 - **NEG-005**: The design rests partly on observed behavior (CTX-006 to CTX-012 and CTX-017). Anthropic may change it without notice.
 - **NEG-006**: A row leaves Priority when Josh clicks it on the board, not when he opens the thread some other way.
 - **NEG-007**: Six files for about sixty lines of gate code is more structure than the code needs. This is the cost of following the layers policy.
-- **NEG-008**: The plugin depends on the thread machine's Node being able to run TypeScript files. That is observed, not promised (CTX-017). On an older Node the hook would fail, the gate would not block, and turns would go unreported with no visible error.
+- **NEG-008**: The plugin depends on Node 24.22.3 being present on the thread's machine. That was seen at one path on one machine and is not promised (CTX-017). The machine's default Node is older. Where 24.22.3 is missing, the gate does not block, and turns go unreported with no visible error.
 
 ## Alternatives Considered
 

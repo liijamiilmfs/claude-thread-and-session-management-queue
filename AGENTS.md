@@ -70,6 +70,7 @@ TypeScript rules:
 - Import other files by their `.ts` name.
 - Do not commit compiled `.js` files.
 - `typescript` and `@types/node` are development dependencies only. The plugin needs neither at run time.
+- Run everything on Node 24.22.3: tests, the type check and the hooks. Do not rely on a machine's default `node`.
 
 ## Gate rules
 
@@ -143,4 +144,4 @@ Keep scratch files out of the repository. Commit nothing generated.
 - A thread ends a turn with no row: check that the plugin is switched on for that project and that the board address is set. With no address the gate does nothing by design.
 - A thread reports the gate blocked it twice and then let it go: the row write failed twice. Open the board and check that it loads.
 - A hook seems not to fire: open the hooks menu in the session to see which hooks are registered.
-- A hook fails with a syntax error on a `.ts` file: the machine's Node is too old to run TypeScript. Check `node -p process.features.typescript`. It printed `strip` on Node v22.23.5.
+- A hook fails with a syntax error on a `.ts` file: it ran on the wrong Node. The project's version is 24.22.3. A thread's machine may have an older default `node`. Check which `node` the hook command runs.
