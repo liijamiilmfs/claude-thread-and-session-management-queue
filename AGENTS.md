@@ -76,7 +76,7 @@ These are the product. Do not change one without a Linear issue that says so.
 
 ## Setup commands
 
-Not defined yet. `RUL-3166` adds the plugin skeleton and with it the install and test commands. Do not invent one.
+Node 24 or later. Install with `npm ci`. Node runs TypeScript files directly, so there is no build step.
 
 ## Development workflow
 
@@ -84,17 +84,18 @@ Not defined yet. No build step is planned.
 
 ## Testing instructions
 
-Not defined yet. `RUL-3166` picks the test command. Required coverage, from `RUL-3167`: one test for each gate rule above.
+Run `npm test` (Node's built-in test runner, files named `*.test.ts`) and `npm run typecheck`. Required coverage, from `RUL-3167`: one test for each gate rule above.
 
 ## Verification commands
 
 | Class | Command | Note |
 |---|---|---|
-| `install` | Not defined yet | Added by `RUL-3166` |
+| `install` | `npm ci` | |
 | `format` | Not defined yet | Added by `RUL-3166` |
 | `lint` | Not defined yet | `RUL-3166` plans a plugin manifest check. There is no manifest to check today. |
-| `test` | Not defined yet | Added by `RUL-3166` |
-| `verify PR` | Not defined yet | Will be lint plus test |
+| `typecheck` | `npm run typecheck` | Runs `tsc`, emits nothing |
+| `test` | `npm test` | Runs `node --test` |
+| `verify PR` | CI workflow | Typecheck plus test. Lint to come with `RUL-3166` |
 | `verify release` | Does not apply | Nothing is packaged or published from this repository yet |
 | `audit` | Code review against ADR-0001 | No automated architecture check |
 
