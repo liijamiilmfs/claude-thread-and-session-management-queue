@@ -15,6 +15,11 @@ function rowNode(r: DisplayRow, manager: Manager): HTMLElement {
   const a = el('a', 'row') as HTMLAnchorElement;
   if (r.link) { a.href = r.link; a.target = '_blank'; a.rel = 'noopener'; }
   a.addEventListener('click', () => manager.markRowSeen(r.docId));
+  if (!r.link) { // no href means no keyboard focus, so make the row a button
+    a.tabIndex = 0;
+    a.setAttribute('role', 'button');
+    a.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); manager.markRowSeen(r.docId); } });
+  }
   const top = el('div', 'top');
   top.append(el('span', 'title', r.title), el('span', 'chip ' + r.tone, r.stateLabel));
   a.append(top);
