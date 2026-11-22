@@ -70,9 +70,15 @@ export const isPriority = (r: DisplayRow): boolean => r.state !== 'working' && r
 
 const cutoffFor = (now: number): number => now - MAX_AGE_DAYS * 86400000;
 
+export const MAX_DELETES = 200; // one pass, so a fault cannot empty the board
+
 // Board rows to delete: older than MAX_AGE_DAYS. A row with no readable time is never deleted.
+// If even the newest row is that old, the device clock is wrong or the board is idle: delete nothing.
 export function expired(rows: DisplayRow[], now: number): string[] {
-  return rows.filter(r => Date.parse(r.updatedAt) < cutoffFor(now)).map(r => r.docId);
+  const cutoff = cutoffFor(now);
+  const times = rows.map(r => Date.parse(r.updatedAt)).filter(t => !isNaN(t));
+  if (!times.length || Math.max(...times) < cutoff) return [];
+  return rows.filter(r => Date.parse(r.updatedAt) < cutoff).slice(0, MAX_DELETES).map(r => r.docId);
 }
 
 // One row per thread: its newest. Rows older than MAX_AGE_DAYS are left out. Newest first.
@@ -116,19 +122,29 @@ export function groups(rows: DisplayRow[], now: number): Group[] {
   return out;
 }
 
-// ---- Connector: the page database ----
+// ---- Connector: the page database. The only code that calls it. ----
 type Db = {
   collection(name: string): { onSnapshot(ok: (snap: { docs: { id: string; data(): StoredRow | undefined }[] }) => void, fail: (e: { code?: string }) => void): void };
   doc(path: string): { update(data: object): Promise<unknown>; delete(): Promise<unknown> };
 };
 
-async function openDb(): Promise<Db | null> {
-  return (await (globalThis as any).claude?.use?.('db')) ?? null;
-}
+export type Board = {
+  subscribe(onRows: (rows: DisplayRow[]) => void, onError: (code: string) => void): void;
+  markSeen(docId: string): void;
+  deleteRows(docIds: string[]): Promise<void>;
+};
 
-// Deletes board rows only: every path is in the turns collection of this page's own database.
-async function deleteRows(db: Db, docIds: string[]): Promise<void> {
-  for (const id of docIds) await db.doc('turns/' + id).delete().catch(() => {});
+export async function openBoard(): Promise<Board | null> {
+  const db: Db | null = (await (globalThis as any).claude?.use?.('db')) ?? null;
+  if (!db) return null;
+  return {
+    subscribe: (onRows, onError) => db.collection('turns').onSnapshot(
+      snap => onRows(snap.docs.map(d => toDisplay(d.id, d.data() ?? {}))),
+      e => onError(e?.code ?? 'error')),
+    markSeen: docId => { db.doc('turns/' + docId).update({ seen_at: new Date().toISOString() }).catch(() => {}); },
+    // Board rows only: every path is in the turns collection of this page's own database.
+    deleteRows: async docIds => { for (const id of docIds) await db.doc('turns/' + id).delete().catch(() => {}); },
+  };
 }
 
 // ---- Client: the only code that touches the document ----
@@ -139,12 +155,10 @@ function el(tag: string, cls?: string, text?: string): HTMLElement {
   return n;
 }
 
-function rowNode(r: DisplayRow, db: Db): HTMLElement {
+function rowNode(r: DisplayRow, board: Board): HTMLElement {
   const a = el('a', 'row') as HTMLAnchorElement;
   if (r.link) { a.href = r.link; a.target = '_blank'; a.rel = 'noopener'; }
-  a.addEventListener('click', () => {
-    db.doc('turns/' + r.docId).update({ seen_at: new Date().toISOString() }).catch(() => {});
-  });
+  a.addEventListener('click', () => board.markSeen(r.docId));
   const top = el('div', 'top');
   top.append(el('span', 'title', r.title), el('span', 'chip ' + r.tone, r.stateLabel));
   a.append(top);
@@ -156,25 +170,24 @@ function rowNode(r: DisplayRow, db: Db): HTMLElement {
 async function start(): Promise<void> {
   const status = document.getElementById('status')!;
   const box = document.getElementById('list')!;
-  const db = await openDb();
-  if (!db) { status.textContent = 'This view cannot reach the list. Open the page inside Claude, signed in.'; return; }
+  const board = await openBoard();
+  if (!board) { status.textContent = 'This view cannot reach the list. Open the page inside Claude, signed in.'; return; }
   const slow = setTimeout(() => { status.textContent = 'The list cannot be reached yet. Still trying.'; }, 10000);
-  db.collection('turns').onSnapshot(snap => {
+  board.subscribe(all => {
     clearTimeout(slow);
     const now = Date.now();
-    const all = snap.docs.map(d => toDisplay(d.id, d.data() ?? {}));
     const shown = groups(all, now);
-    void deleteRows(db, expired(all, now));
+    void board.deleteRows(expired(all, now));
     box.replaceChildren(...shown.map(g => {
       const section = el('div', 'day');
-      section.append(el('h2', '', g.label), ...g.rows.map(r => rowNode(r, db)));
+      section.append(el('h2', '', g.label), ...g.rows.map(r => rowNode(r, board)));
       return section;
     }));
     const waiting = shown.find(g => g.label === 'Priority')?.rows.length ?? 0;
     const count = shown.reduce((n, g) => n + g.rows.length, 0);
     const stored = `${all.length.toLocaleString()} of ${ROW_LIMIT.toLocaleString()} stored rows used.`;
     status.textContent = count ? `${count} threads. ${waiting} waiting on you. ${stored}` : `No thread has reported yet. ${stored}`;
-  }, e => { clearTimeout(slow); status.textContent = `The list stopped updating (${e?.code ?? 'error'}). Reload the page.`; });
+  }, code => { clearTimeout(slow); status.textContent = `The list stopped updating (${code}). Reload the page.`; });
 }
 
 if (typeof document !== 'undefined') void start();

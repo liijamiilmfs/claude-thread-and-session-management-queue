@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { toDisplay, newest, groups, isPriority, dayLabel, expired } from './board.ts';
+import { toDisplay, newest, groups, isPriority, dayLabel, expired, MAX_DELETES } from './board.ts';
 
 const NOW = Date.parse('2026-11-22T12:00:00Z');
 const at = (iso: string) => ({ state: 'finished', updated_at: iso });
@@ -74,6 +74,17 @@ test('the rest are grouped by day', () => {
   ], NOW);
   assert.deepEqual(g.map(x => x.label), ['Today', 'Yesterday']);
   assert.equal(dayLabel('nope', NOW), 'Unknown date');
+});
+
+test('a clock far in the future deletes nothing', () => {
+  const rows = [toDisplay('a', { thread: 't', ...at('2026-11-20T00:00:00Z') }), toDisplay('b', { thread: 'u', ...at('2026-11-21T00:00:00Z') })];
+  assert.deepEqual(expired(rows, Date.parse('2030-01-01T00:00:00Z')), []);
+});
+
+test('one pass deletes at most MAX_DELETES rows', () => {
+  const rows = [toDisplay('new', { thread: 'n', ...at('2026-11-22T00:00:00Z') })];
+  for (let i = 0; i < MAX_DELETES + 50; i++) rows.push(toDisplay('o' + i, { thread: 'o' + i, ...at('2026-09-01T00:00:00Z') }));
+  assert.equal(expired(rows, NOW).length, MAX_DELETES);
 });
 
 test('importing the script touches no document', () => {
