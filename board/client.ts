@@ -16,15 +16,20 @@ function el(tag: string, cls?: string, text?: string): HTMLElement {
 function rowNode(r: DisplayRow, service: Service, onFailed: () => void): HTMLElement {
   const a = el('a', 'row') as HTMLAnchorElement;
   if (r.link) { a.href = r.link; a.target = '_blank'; a.rel = 'noopener'; }
-  // Saved on press, not on click: inside the Claude app the click can leave the page before the save is sent.
-  let saved = false;
-  const markOnce = () => { if (!saved) { saved = true; service.markSeen(r.docId, onFailed); } };
-  a.addEventListener('pointerdown', markOnce);
-  a.addEventListener('click', markOnce);
+  // The mark is saved only on a finished activation (click, or Enter and Space on a row with no link), once per row.
+  let saving: Promise<void> | null = null;
+  const markOnce = (): Promise<void> => saving ??= service.markSeen(r.docId, onFailed);
+  let passThrough = false;
+  a.addEventListener('click', e => {
+    if (!r.link || passThrough || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) { passThrough = false; void markOnce(); return; }
+    // Wait briefly for the save, then open the thread. Inside the Claude app a click can leave the page before the save is sent.
+    e.preventDefault();
+    void markOnce().then(() => { if (!window.open(r.link, '_blank', 'noopener')) { passThrough = true; a.click(); } }); // blocked: let the link open the normal way
+  });
   if (!r.link) { // no href means no keyboard focus, so make the row a button
     a.tabIndex = 0;
     a.setAttribute('role', 'button');
-    a.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); markOnce(); } });
+    a.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void markOnce(); } });
   }
   const top = el('div', 'top');
   top.append(el('span', 'title', r.title), el('span', 'chip ' + r.tone, r.stateLabel));

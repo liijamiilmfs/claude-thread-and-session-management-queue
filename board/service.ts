@@ -63,9 +63,11 @@ export function groups(rows: DisplayRow[], now: number): Group[] {
 
 export type Service = {
   watch(onView: (view: View) => void, onError: (code: string) => void): void;
-  markSeen(docId: string, onFailed: () => void): void; // saves in the background, retries, then calls onFailed
+  // Saves the mark, retries, then calls onFailed. The promise ends when the save works or after OPEN_PATIENCE_MS, whichever is first.
+  markSeen(docId: string, onFailed: () => void): Promise<void>;
 };
 
+export const OPEN_PATIENCE_MS = 800; // how long opening a thread waits for the save
 export const SEEN_RETRY_DELAYS = [1000, 2000, 5000]; // ms between tries, so at most four tries
 
 type Deps = { manager: Manager; toDisplay: (docId: string, row: StoredRow) => DisplayRow; now: () => number; wait: (ms: number) => Promise<void> };
@@ -87,7 +89,7 @@ export function createService({ manager, toDisplay, now, wait }: Deps): Service 
       }, onError);
     },
     markSeen(docId, onFailed) {
-      void (async () => {
+      const saved = (async () => {
         for (let i = 0; ; i++) {
           try { await manager.markRowSeen(docId); return; } catch {
             if (i >= SEEN_RETRY_DELAYS.length) { onFailed(); return; }
@@ -95,6 +97,7 @@ export function createService({ manager, toDisplay, now, wait }: Deps): Service 
           }
         }
       })();
+      return Promise.race([saved, wait(OPEN_PATIENCE_MS)]);
     },
   };
 }

@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import type { StoredDoc } from './model.ts';
 import type { Manager } from './manager.ts';
 import { toDisplay } from './transformer.ts';
-import { createService } from './service.ts';
+import { createService, OPEN_PATIENCE_MS } from './service.ts';
 
 const NOW = Date.parse('2026-11-22T12:00:00Z');
 
@@ -47,7 +47,7 @@ test('clicks and errors pass through', () => {
   const manager: Manager = { watchRows: (_ok, bad) => bad('boom'), markRowSeen: async id => { calls.seen.push(id); }, removeRows: async () => {} };
   const service = createService({ manager, toDisplay, now: () => NOW, wait: async () => {} });
   service.watch(() => {}, c => calls.err.push(c));
-  service.markSeen('a', () => {});
+  void service.markSeen('a', () => {});
   assert.deepEqual([calls.seen, calls.err], [['a'], ['boom']]);
 });
 
@@ -82,13 +82,14 @@ test('no shipped file is missing from the allow-list', () => {
 function seenService(failures: number) {
   const waits: number[] = [];
   let tries = 0, failed = 0;
+  const retryWaits = () => waits.filter(ms => ms !== OPEN_PATIENCE_MS); // the patience wait is a separate timer
   const manager: Manager = {
     watchRows: () => {}, removeRows: async () => {},
     markRowSeen: async () => { tries++; if (tries <= failures) throw new Error('refused'); },
   };
   const service = createService({ manager, toDisplay, now: () => NOW, wait: async ms => { waits.push(ms); } });
-  const run = async () => { service.markSeen('a', () => { failed++; }); await new Promise(r => setImmediate(r)); };
-  return { run, waits, get tries() { return tries; }, get failed() { return failed; } };
+  const run = async () => { void service.markSeen('a', () => { failed++; }); await new Promise(r => setImmediate(r)); };
+  return { run, get waits() { return retryWaits(); }, get tries() { return tries; }, get failed() { return failed; } };
 }
 
 test('a seen save that works first time makes one try and no note', async () => {
@@ -107,4 +108,26 @@ test('a seen save that keeps failing stops after four tries and reports once', a
   const s = seenService(99);
   await s.run();
   assert.deepEqual([s.tries, s.waits, s.failed], [4, [1000, 2000, 5000], 1]);
+});
+
+test('opening waits for the save when it is quick, and gives up waiting after the patience limit when it hangs', async () => {
+  const waits: Record<number, () => void> = {};
+  const wait = (ms: number) => new Promise<void>(done => { waits[ms] = done; });
+  const mk = (save: () => Promise<void>) => createService({ manager: { watchRows: () => {}, removeRows: async () => {}, markRowSeen: save }, toDisplay, now: () => NOW, wait });
+  let done = false;
+  await mk(async () => {}).markSeen('a', () => {}).then(() => { done = true; }); // saved before the patience wait ends
+  assert.ok(done);
+  done = false;
+  const hung = mk(() => new Promise<void>(() => {})).markSeen('a', () => {}).then(() => { done = true; });
+  await new Promise(r => setImmediate(r));
+  assert.equal(done, false); // still waiting
+  waits[OPEN_PATIENCE_MS]();
+  await hung;
+  assert.ok(done);
+});
+
+test('the Client marks a row only on a finished activation', () => {
+  const src = readFileSync(new URL('client.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /pointerdown|pointerup|mousedown|mouseup|touchstart|touchend/);
+  assert.equal(src.match(/service\.markSeen\(/g)?.length, 1);
 });
