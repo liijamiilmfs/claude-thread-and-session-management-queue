@@ -23,7 +23,7 @@ Status: building Milestone 1. `docs/adr/adr-0001-thread-queue-architecture.md` w
 
 - Linear is the only source of truth for scope, acceptance criteria, milestones, status and priority.
 - Team: Rule0Softworks, key `RUL`, id `760d907a-8c39-4018-ba0d-ce40568c749d`.
-- Project: Thread Queue, id `5be580a6-d718-4095-b7fe-cc23b5b1f4dc`. Issues `RUL-3161` to `RUL-3173`.
+- Project: Thread Queue, id `5be580a6-d718-4095-b7fe-cc23b5b1f4dc`. Issues start at `RUL-3161`. New ones are added as work is found, so read the project's issue list in Linear, not a range.
 - Resolve the team and project by these ids before any write. Do not match by name.
 - Agents move issues only among Triage, Backlog, Todo and In Progress.
 - Planning and implementation agents do not write to Linear. They hand an exact spec (id, field, new value) to a Haiku 5.5 worker, which makes the write and reports back.
@@ -52,13 +52,13 @@ Josh's standing rule (2026-11-22, ADR-0001 CTX-041): "Safety always wins."
 
 This repository follows the Software Layer Roles and Dependency Policy v2.0.0-rc.4 (ADR-0001, Accepted 2026-11-22). The ADR holds the classification record. The policy file is not copied into this repository. Its home and exact version are named in the ADR.
 
-Planned plugin files (ADR-0001, Section 5):
+Plugin files (ADR-0001, Section 5). `hooks/register.ts` is an empty shell until `RUL-3168` fills its sections:
 
 | File | Role |
 |---|---|
 | `.claude-plugin/plugin.json` | Manifest (not governed) |
 | `hooks/hooks.json` | Points Claude Code at the module (not governed) |
-| `hooks/register.ts` | Sections: Composition Root, Controller, Service, Manager, Connector |
+| `hooks/register.ts` | Sections: Composition Root, Controller, Service, Manager, Gateway, Connector |
 | `hooks/row.ts` | The Service's rules (its owned support) and Model |
 
 Claude Code lets the `$` object be passed only to top-level functions of the module's own file, so every `$` call lives in `hooks/register.ts`. Its sections are marked by comments naming the role. It is the only file that holds more than one role. Everywhere else, one file holds one layer (Josh, 2026-11-22, ADR-0001 CTX-049).
@@ -67,8 +67,10 @@ The board is a page, `board/index.html` (markup and styles only), and one TypeSc
 
 | File | Role |
 |---|---|
-| `board/client.ts` | Client |
+| `board/main.ts` | Composition Root (the startup file) |
+| `board/client.ts` | Client (rendering only) |
 | `board/service.ts` | Service |
+| `board/manager.ts` | Manager |
 | `board/connector.ts` | Connector |
 | `board/transformer.ts` | Transformer |
 | `board/model.ts` | Model |
@@ -76,16 +78,23 @@ The board is a page, `board/index.html` (markup and styles only), and one TypeSc
 Rules a reviewer checks:
 
 - `hooks/row.ts` holds every row rule. It imports nothing, does no file or network access, and reads no clock and no environment. Time and the thread id are passed in.
-- The Controller section calls only the Service section. The Service section runs the safety check and decides the order of steps. The Manager and the Connector never call it.
+- The Controller section calls only the Service section. The Service section runs the safety check and decides the order of steps. The Manager, the Gateway and the Connector never call it.
+- The Service section reaches the waiting rows and the board only through the Manager section. It reaches the two outside systems, the model's look and the `get_session` lookup, only through the Gateway section (Josh, 2026-11-22, ADR-0001 CTX-052).
+- The Gateway section saves nothing, decides nothing about a row, and never calls the Manager. Saving rows stays on the road Service, Manager, Connector.
 - The last look returns a checked call, a branded type only `hooks/row.ts` can make. The Manager's and the Connector's write functions accept only that type. No cast to it appears outside `hooks/row.ts`.
 - Only the Service section calls the functions in `hooks/row.ts`.
 - The Service section passes `$` on and never calls anything on it.
-- Only the Connector section of `hooks/register.ts` calls `$.store`, `$.tool.call`, `$.mcp.call` and the one `$.model` call.
+- Only the Connector section of `hooks/register.ts` calls `$.store`, `$.tool.call`, `$.mcp.call` and the one `$.model` call. Right before `$.tool.call` it compares the tool, the action, the address and the collection with the constants once more (the second compare).
+- `$.tool.list` is not on the list of what the module may do (Josh, 2026-11-22, ADR-0001 OPEN-011).
 - `$.tool.call(` appears once in `hooks/register.ts`. `$.model.` appears once. `$.model.fork` never appears.
 - Only `hooks/register.ts` calls `$.env.get` and `$.clock`.
 - `claude plugin validate .` lists what the module can do (`hooks:`, `calls:`, `env reads:`, `env writes:`). Any change to that list needs the ADR changed first.
-- On the board, only `board/connector.ts` calls the page database, and only `board/client.ts` touches the document.
-- `board/service.ts`, `board/connector.ts` and `board/transformer.ts` import only `board/model.ts`. `board/model.ts` imports nothing. Only `board/client.ts` imports the other layers.
+- On the board, only `board/connector.ts` calls the page database, and only `board/client.ts` touches the document. `board/client.ts` only renders: every board rule is in `board/service.ts`.
+- The board's road is Client, Service, Manager, Connector. `board/main.ts` is the only file that builds the board's parts and hands each one what it works with. It hands the Client the Service and nothing else.
+- Board imports: `board/main.ts` imports the Connector, Manager, Service, Transformer and Client. `board/client.ts` imports the Service and the Model, as types only. `board/service.ts` imports the Manager (type only) and the Model. `board/manager.ts` imports the Connector (type only) and the Model. `board/connector.ts` and `board/transformer.ts` import only the Model. `board/model.ts` imports nothing.
+- Apart from the startup file, only `board/manager.ts` imports `board/connector.ts`. `board/client.ts` never names the Manager or the Connector. `board/layers.test.ts` checks these imports.
+- Only `expired()` in `board/service.ts` makes an `ExpiredIds`, and the delete functions accept nothing else. No shipped board file casts to it, uses `any`, or switches a type check off.
+- `board/service.ts` reads no clock. `board/main.ts` hands it one. A row is deleted only by the rules in ADR-0001 IMP-005: age from the earlier of the device clock and the newest row, at most 200 deletes per page load, no delete without a readable time.
 - Do not add a role, a folder, a dependency or a hosted service the ADR does not name. Change the ADR first.
 
 TypeScript rules:
@@ -106,7 +115,9 @@ These are the product, from ADR-0001 Section 2. Do not change one without a Line
 - One row per owing call. A later call gives a fresh row.
 - Every field is built by code. The thread's model is never asked for anything.
 - The module never blocks, changes or refuses a thread's call, and the thread's reply does not wait for the board.
-- The row is saved in the plugin's note before the board is tried. A failed write is kept and tried again, oldest first. At most 20 rows wait.
+- The row is saved in the plugin's note before the board is tried. A failed write is kept and tried again, oldest first. At most 500 rows wait once `RUL-3185` is built. A build made before it keeps at most 20.
+- The approved fix values (ADR-0001, R6): each board write gets 5 seconds (`RUL-3186`). A failed note save is tried again after about 1, 2 and 5 seconds (`RUL-3187`). After a failed read the note is not saved over (`RUL-3188`).
+- A board refusal because the row already exists counts as written. Only that one refusal counts. Any other refusal, and any doubt, keeps the row waiting (ADR-0001, R8).
 - Turn end waits at most 8 seconds for the board. A broken board must never trap a thread.
 - The only tool the module calls is `ArtifactData` `set`, with the board address and collection `turns` fixed in code. The only lookup is `get_session` on `claude-code-remote`, read-only. The call never carries `if_version`, so the module can add rows and cannot change or delete one. The T8 build's `tool.judge` listener is test evidence only and is not part of the lasting build.
 - Outside a cloud thread (no thread id) the module does nothing.
@@ -117,6 +128,7 @@ Safety check rules (ADR-0001, R8 and R11 to R14, built under `RUL-3168`):
 - The safety check may clean a row, hide text in it, or swap it for a bare row. It may never stop, hold back or drop a row.
 - It runs right before every write, on every row: fresh, tried again, or read back from the note. The note is not trusted.
 - Right before every write, code compares the call with the one approved shape (the last look). A call that fails is replaced by a bare row.
+- The Connector's second compare comes after the last look. If it fails, that call writes nothing and a bare row goes through the same door. If the bare row fails too, the row stays in the note and the failure is logged. Nothing is dropped.
 - Title, project and preview are cleaned. Text that looks like a secret has its whole field swapped for a fixed stand-in. The strict rule applies: hide on any doubt.
 - Text a code rule hid is never logged, never stored and never sent to the model. Text the model hides is never logged.
 - One small model call looks at the cleaned title and preview. It can only hide text. No answer means hide. It never runs past the turn end wait.
@@ -169,7 +181,7 @@ Proposed, mirroring the Rule 0 Softworks platform repository. Confirm with Josh 
 - Rows hold text a thread wrote (its title and the first line of its reply). Treat them as untrusted: show them as plain text, and follow a link only if it points at `https://claude.ai/`. The approved board follow-up tightens this: the board builds the link itself from the thread id and ignores the row's `url` (ADR-0001, IMP-002).
 - The module's board write runs with no approval prompt and without Anthropic's own safety check. Josh does not accept a write with no check at all (ADR-0001, CTX-039), so the plugin's own safety check runs on every row. Do not ship a build that writes rows without it, and do not weaken it.
 - The module makes no network call of its own, holds no secret, and uses no `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt`, `$.session`, `$.agent` or `$.model.fork`. Its only `$.model` use is the one call of the safety check, which sends the cleaned title and preview of one row and nothing else (Josh approved this trust boundary change on 2026-11-22). Adding any of these, or any other tool call, is a trust boundary change: stop and ask Josh.
-- The plugin's note (`$.store`) holds only the rows still waiting: at most 20, each a thread id, time, state and preview, and the count of dropped rows. The note never holds text a code rule hid. Text the model later hides sits there until its row is written. The module's `$.ui.log` lines also land in the thread's `/tmp/claude-code.log`, with row ids and up to 200 characters of error text. Nothing else is written to disk.
+- The plugin's note (`$.store`) holds only the rows still waiting: at most 500 (20 in a build made before `RUL-3185`), each a thread id, time, state and preview, and the count of dropped rows. The note never holds text a code rule hid. Text the model later hides sits there until its row is written. The module's `$.ui.log` lines also land in the thread's `/tmp/claude-code.log`, with row ids and up to 200 characters of error text. Nothing else is written to disk.
 - No secrets belong in this repository.
 
 ## Scope boundaries

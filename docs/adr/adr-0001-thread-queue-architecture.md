@@ -25,6 +25,18 @@ The design and its evidence are in the Claude project's shared folder, `thread-q
 
 Changed on 2026-11-22 under `RUL-3204`, at Josh's request: the board's code is one file per layer, not one script with a section per layer (CTX-049, Section 5). The plugin keeps its sections, for the reason given in Section 5.
 
+Changed on 2026-11-22 under `RUL-3206`. Josh answered each point before it was written (CTX-050 to CTX-054):
+
+- The board gains a Manager, `board/manager.ts`, and a startup file, `board/main.ts`, with the role Composition Root (OPEN-017, Section 5).
+- The plugin gains a Gateway section for the model's look and the `get_session` lookup. Saving rows stays with the Manager (OPEN-015, Section 5).
+- Two additions to R8: a board refusal because the row exists counts as written (OPEN-013), and a second compare inside the Connector (OPEN-016).
+- `$.tool.list` comes off the list of what the plugin may do (OPEN-011, Sections 3 and 6).
+- CI may install the `claude` command for the abilities check (Section 3).
+- The board's delete and clock rules are written down as built (IMP-005, Sections 5 and 6).
+- The four fixes carry their approved values (R6, and items 2, 4, 8 and 10 of "What can still lose a row").
+
+No plugin code for any of this exists yet. The Gateway, the two R8 additions and the abilities list are built under `RUL-3168`, the fixes under `RUL-3185` to `RUL-3188`, the CI change under `RUL-3207`. The board's files are merged (pull request 9) and are described here as they are.
+
 Earlier drafts described a pane inside the desktop app (dropped by Josh on 2026-11-21) and then a turnstile that blocked a thread until its model wrote the row (replaced on 2026-11-22 after Milestone 0, see "Alternatives Considered"). No draft was approved, so this text replaces them and nothing is superseded.
 
 Milestone 0 evidence lives outside the repository, in the Claude project's shared folder under `thread-queue/m0-evidence/` (`T1.md` to `T8.md`). Each fact below names its report.
@@ -84,6 +96,20 @@ Josh runs three to five Claude projects at once. Each project's threads run in t
 - **CTX-043**: On the safety choices page (REF-012, 2026-11-22 10:26Z to 10:28Z) Josh said yes to the two row marks `check` and `dropped` (R14), to the board follow-up (IMP-002), and to four known limits: text meant to trick an AI, who wrote a row, other plugins, and the board filling up (see "Known limits of the safety check" and loss item 12). Each accepted limit gets its own Linear issue.
 - **CTX-044**: On the Milestone 1 approval page (2026-11-22 09:54Z to 09:57Z) Josh said yes to IMP-009 (every row carries its build version, row shape changes only add fields, the board reads older shapes) and to the abilities check in Section 3.
 - **CTX-049**: The board's code is one file per layer (2026-11-22 12:28Z to 12:33Z, thread "Build the board page"). Josh does not want several layers packed into one file. Before this, the board was one script, `board/board.ts`, with a section per layer. A throwaway test page showed that the page host lets the board's scripts load each other: Josh saw "SPLIT OK: HELLO" (REF-013). The plugin cannot follow, because of the `$` limit in Section 5.
+- **CTX-050**: The board gets a storage helper and a startup file (OPEN-017, both halves, project chat).
+  - 2026-11-22 12:43Z: "Add helper." That is choice (a): `board/manager.ts`, role Manager.
+  - 2026-11-22 12:52Z, on the board having no single startup file that wires the layers together: "Yeah, we should definitely. So like a startup.cs that we would have in C# or a program.cs." That is `board/main.ts`, role Composition Root.
+- **CTX-051**: "Yes to all five." (2026-11-22 12:46Z, project chat), to five points asked at 12:45Z.
+  - Four stand on that answer: `$.tool.list` comes off the abilities list (OPEN-011), a board refusal because the row exists counts as written (OPEN-013), a second compare inside the Connector (OPEN-016), and CI may run the `claude` command.
+  - The fifth was the Gateway. That first question read "owns every save". The wording was wrong, and the yes to it is not used. Josh answered the corrected wording in CTX-052.
+- **CTX-052**: Three answers at 2026-11-22 13:02Z (project chat), to questions asked at 12:59Z.
+  - The Gateway (OPEN-015). Asked: "Gateway, as corrected: it checks what the model sees and handles session lookups. Saves stay with the Manager." Josh: "Yes. Save stay with the manager because managers handle the interaction between the persistence layer and any kind of service layer. So that makes sense."
+  - The board's rules. Asked: "Write the board's delete and clock rules into the decision record: 200 deletes max per load, age from the earlier clock, and no delete when a row's time can't be read." Josh: "That's correct. I would like that as well." See IMP-005.
+  - CI. Asked: "Have CI build the board on every PR." Josh: "Yes." Built under `RUL-3207`.
+- **CTX-053**: The word is "rendering", not "drawing", for what the board puts on screen (2026-11-22 13:09Z): "I think rendering is a better word than drawing."
+- **CTX-054**: The values of the four fixes (CTX-038 asked for the fixes).
+  - On the Milestone 1 approval page (2026-11-22 09:54Z to 09:57Z) Josh said yes to: at most 500 rows wait (`RUL-3185`), each board write gets 5 seconds (`RUL-3186`), and after a failed read the note is not saved over (`RUL-3188`).
+  - At 10:01Z, in the project chat, he said yes to trying a failed note save again, with short growing waits between tries: about 1, 2 and 5 seconds (`RUL-3187`).
 
 Rule 0 Softworks requires each repository to adopt the Software Layer Roles and Dependency Policy through a scope-adoption ADR. This record is that ADR for this repository.
 
@@ -115,11 +141,25 @@ These are the product.
 - **R3**: One row per owing call. A later call gives a fresh row, and the board shows the newest per thread (Josh's q4). A turn that replies and then resolves gives two rows and ends on the resolve.
 - **R4**: Every field is built by code. Thread id from `CLAUDE_CODE_REMOTE_SESSION_ID`. Time from the clock, never the same time twice, since it is part of the row id `<thread>.<epoch ms>`. Link `https://claude.ai/code/<thread>`. Title and project from `get_session` (CTX-025). Preview: the first line with text of what was posted, cut to 200 characters, or a fixed neutral text for the connect, resolve and helpline calls. If the title lookup fails, the thread id stands in. If the project lookup fails, the row goes out with no project. Title, project and preview are cleaned and checked for secrets before the row is saved (R12). `build` is the version of the build that wrote the row (IMP-009): the version shape, at most 32 characters, or `unknown` if it does not fit. `check` and `dropped` are set by R14.
 - **R5**: The module never blocks, changes or refuses a thread's call.
-- **R6**: The row is saved in the note before the board is tried. A failed write is kept and tried again, oldest first. At most 20 rows wait. The oldest is dropped past that, and the drop is logged.
+- **R6**: The row is saved in the note before the board is tried. A failed write is kept and tried again, oldest first. At most 500 rows wait. The oldest is dropped past that, and the drop is logged.
+  - The four values below are Josh's (CTX-054). Each line names the issue that builds it and what a build made before that issue does. No build has them yet.
+  - **Waiting limit: 500 rows** (`RUL-3185`). A build made before `RUL-3185` keeps at most 20.
+  - **Each board write gets 5 seconds of its own** (`RUL-3186`). A write with no answer in that time counts as failed. Its row is kept and tried again, and later rows go out without waiting for it. A write that timed out may still have landed, and then the retry is refused: R8, "Already there counts as written". A build made before `RUL-3186` has no limit per write: a call that never answers holds up every later write until Claude Code restarts.
+  - **A failed note save is tried again** after about 1 second, then about 2, then about 5 (`RUL-3187`). If it still fails, that is logged and the rows stay in memory for the next save. The waits never hold up the thread's reply, and R7 still holds. A build made before `RUL-3187` logs `note not saved` and does not try that save again.
+  - **After a failed read, the note is not saved over** until a read has worked, and the failed read is logged (`RUL-3188`). A build made before `RUL-3188` swallows the error, and its next save overwrites the note.
 - **R7**: Turn end waits at most 8 seconds for the board. A broken board must never trap a thread. The model look (R13) never runs past what is left of this wait: when time is short the look is skipped and the text is hidden.
 - **R8**: The only tool the module calls is `ArtifactData`, action `set`, with the board address and collection fixed in code. The only lookup is `get_session` on `claude-code-remote`, read-only. The thread's own record is read before every write pass, so a renamed title shows on the next row. The parent's record is read until a project name is found, then not again in that run. The only model call is the one in R13.
   - **The last look.** Right before every write, code compares the call with the one approved shape. It passes only if: the tool is `ArtifactData`, the action is `set`, the address equals the board constant, the collection is `turns`, the call has exactly the keys `tool`, `action`, `url`, `collection`, `doc_id` and `data`, the `doc_id` is this run's thread id, a dot and a 13 digit time, and the row passes the shape rule in R11. If it fails, the bare row (R11) is built and checked the same way.
   - **Add only.** The call never carries `if_version`, and the board refuses a `set` without it on a row that exists (CTX-048). So the module can add rows. It cannot change or delete one.
+  - **Already there counts as written** (Josh, CTX-051, settles OPEN-013). A board refusal because the row already exists counts as written, and the row leaves the waiting line.
+    - Why that is safe: row ids never repeat (R4). So the row on the board is this row.
+    - Only that one refusal counts. Any other refusal, error or odd answer keeps the row waiting.
+    - When it is not certain that the refusal means "exists", the row keeps waiting. A kept row is not lost. A row taken off the line by mistake is.
+    - It gets its own log line, so it can be told apart from a plain write. The builder records the exact refusal seen live (`RUL-3168`).
+  - **The second compare** (Josh, CTX-051, settles OPEN-016). Right before `$.tool.call` the Connector compares four fixed things with the constants once more: the tool, the action, the address and the collection. It is the Connector's own code (Section 5).
+    - If it fails, that call writes nothing. The failure goes back to the Service, and the Service sends a bare row (R11) through the same door.
+    - If the bare row fails the compare too, nothing is dropped. The row stays in the note and the failure is logged. Otherwise one wrong constant would lose every row.
+    - It adds a check and removes none. The last look stays where it is.
 - **R9**: Outside a cloud thread (no thread id) the module does nothing.
 - **R10, state**: code picks the state from the tool called (CTX-037):
 
@@ -177,8 +217,12 @@ The four states and their meanings, in order (T4 section 2, Josh's q5): `needs_y
 - TypeScript (CTX-016). The module's `.ts` files run inside Claude Code, on Claude Code's own runtime (CTX-024, seen working on 2.1.330). The plugin starts no process of its own. Which runtime that is (bundled, or the machine's Node) is Claude Code's choice, covered by NEG-004.
 - Use only TypeScript syntax that can be removed: no enums, no namespaces and no parameter properties. Imports name the `.ts` file.
 - `tsc`, set to emit nothing, is the type check (`npm run typecheck`). Tests run on Node 24.22.3's built-in test runner (`npm test`). `typescript` and `@types/node` are development dependencies only.
-- `claude plugin validate .` prints Claude Code's own list of what the module can do (`hooks:`, `calls:`, `env reads:`, `env writes:`). The lasting list: hooks `tool.call` on the nine R1 tools and `turn.complete`; calls `$.clock.after`, `$.clock.now`, `$.env.get`, `$.mcp.call`, `$.store.get`, `$.store.set`, `$.tool.call`, `$.tool.list`, `$.ui.log`, and one model call for R13, `$.model.complete` or `$.model.classify`, exactly one of the two (OPEN-008); env reads `CLAUDE_CODE_REMOTE_SESSION_ID`; env writes nothing. The T8 build also listens on `tool.judge` for `ArtifactData`. That listener is test evidence only (the T8 reviewer found it proves little) and is dropped from the lasting build.
-- Proposal for `RUL-3166`: keep the expected list in the repository, and make a lint step that compares the printed `hooks:`, `calls:`, `env reads:` and `env writes:` lines with it and fails on any difference. `validate` alone is not enough: it passed with warnings in T8 and would still pass with a new call added. Whether CI can run the `claude` command is not proven.
+- `claude plugin validate .` prints Claude Code's own list of what the module can do (`hooks:`, `calls:`, `env reads:`, `env writes:`). The lasting list: hooks `tool.call` on the nine R1 tools and `turn.complete`; calls `$.clock.after`, `$.clock.now`, `$.env.get`, `$.mcp.call`, `$.store.get`, `$.store.set`, `$.tool.call`, `$.ui.log`, and one model call for R13, `$.model.complete` or `$.model.classify`, exactly one of the two (OPEN-008); env reads `CLAUDE_CODE_REMOTE_SESSION_ID`; env writes nothing. The T8 build also listens on `tool.judge` for `ArtifactData`. That listener is test evidence only (the T8 reviewer found it proves little) and is dropped from the lasting build.
+  - `$.tool.list` was on the lasting list until 2026-11-22. Josh took it off (CTX-051, settles OPEN-011). The safety design does not need it.
+- The abilities check (`hooks/abilities.test.ts`, built under `RUL-3166`): the approved list is kept in the repository, and a test runs `claude plugin validate .` and fails when what it prints differs from that list. `validate` alone is not enough: it passed with warnings in T8 and would still pass with a new call added. The list in the test is "nothing" while `hooks/register.ts` is an empty shell. `RUL-3168` replaces it with the lasting list above.
+  - As merged, the test is skipped on a machine with no `claude` command. CI has none, so CI is green whether or not the check ran.
+  - Josh, CTX-051: CI may install the `claude` command for this check, at one exact version. It is a tool of the check. The plugin never needs it at run time. CI gets no secret for it. Built under `RUL-3207`. From then on, a missing `claude` command fails the CI run. It does not skip.
+  - Josh, CTX-052: CI also builds the board (`npm run build:board`) on every pull request, so a board file that does not compile fails it. Built under `RUL-3207`.
 - A second build check, the source test, is a plain test on the text of the two plugin files. It runs in CI with no `claude` command. It passes only if: `$.tool.call(` appears once in `hooks/register.ts`. `$.mcp.call(` appears only with `claude-code-remote` and `get_session`. None of `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt`, `$.session`, `$.agent` appears. `$.model.` appears once, as the one call R13 allows, and `$.model.fork` never appears. `hooks/row.ts` has no `import` and no `$`. The Service section of `hooks/register.ts` never calls anything on `$`. No cast to the checked call type appears outside `hooks/row.ts`.
 - `build` comes from a constant in `hooks/register.ts`. A test fails when it differs from the version in `.claude-plugin/plugin.json`.
 - Release check: the zip is built from a merged commit and its checksum is recorded. After the upload, the checksum of the file that reached a thread's machine is compared with it, as T8 did.
@@ -193,7 +237,7 @@ Rationale: the module is code and runs whether or not the model remembers (CTX-0
 | Policy | Software Layer Roles and Dependency Policy, `R0S-ARCH-LAYERS`, version `2.0.0-rc.4` |
 | Immutable artifact identifier | File `docs/architecture/software-layers-v2.0.0-rc.4.md` in `Rule-0-Softworks/rule-0-softworks-platform` at commit `32e4c1c548d3bbef05dd66460f72536cf5253872`, SHA-256 `84f1792b0a3b583cfd0486aa5e40e31fd71e542d2d88f6bf8e88d610155b6fcd` |
 | Previously Active policy | None. This is a new repository. |
-| Governed scopes | `hooks/register.ts`, `hooks/row.ts`, `board/model.ts`, `board/transformer.ts`, `board/service.ts`, `board/connector.ts` and `board/client.ts` |
+| Governed scopes | `hooks/register.ts`, `hooks/row.ts`, `board/main.ts`, `board/client.ts`, `board/service.ts`, `board/manager.ts`, `board/connector.ts`, `board/transformer.ts` and `board/model.ts` |
 | Exclusions | Test files (`*.test.ts`), JSON manifests and config, and documentation |
 | Adoption owner | Josh |
 | Approval date | 2026-11-22 |
@@ -203,7 +247,7 @@ Rationale: the module is code and runs whether or not the model remembers (CTX-0
 | Persistence Connectors with Entity access (6.4) | None. The note and the board store plain JSON and stay Entity-agnostic. |
 | External facility mappings (Section 7) | Section 6 of this record |
 | Incorporated exception ADRs | None |
-| Enforcement | Code review, plus the `claude plugin validate .` list and the source test in Section 3 |
+| Enforcement | Code review, plus the `claude plugin validate .` list and the source test in Section 3, and the board's import test and delete lock test in Section 5 |
 | Effective date | The approval date |
 
 ### 5. Classification record
@@ -216,9 +260,10 @@ One limit shapes the split. Claude Code's checker lets the `$` object be passed 
 |---|---|---|
 | `hooks/register.ts`, Composition Root | Composition Root | `register()`: names the events and the nine tools, wires the handlers |
 | `hooks/register.ts`, Controller | Controller | The `tool.call` and `turn.complete` handlers: pass the call on, then hand the result to the Service. It calls only the Service |
-| `hooks/register.ts`, Service | Service | The conductor. For each waiting row it runs the steps in order: clean and hide secrets, the model's look, the bare row if anything failed, the last look, and only then the write. It holds no rule of its own. It passes `$` on and never calls anything on it |
-| `hooks/register.ts`, Manager | Manager | The waiting rows: add, keep, write oldest first, drop past 20 and count the drops (R14), one write at a time. It does what the Service tells it, hands every read and write to the Connector, and never calls the Service |
-| `hooks/register.ts`, Connector | Connector | The only code that calls `$.store`, `$.tool.call`, `$.mcp.call` and the one `$.model` call (R13) |
+| `hooks/register.ts`, Service | Service | The conductor. For each waiting row it runs the steps in order: clean and hide secrets, the model's look, the bare row if anything failed, the last look, and only then the write. It reaches the waiting rows and the board through the Manager, and the two outside systems through the Gateway. It holds no rule of its own. It passes `$` on and never calls anything on it |
+| `hooks/register.ts`, Manager | Manager | The waiting rows: add, keep, write oldest first, drop past the waiting limit (R6) and count the drops (R14), one write at a time. It does what the Service tells it, hands every read and write to the Connector, and never calls the Service |
+| `hooks/register.ts`, Gateway | Gateway | The two things that come from outside systems: the model's look (R13) and the `get_session` lookup (R8). It hands each ask to the Connector and gives the Service the answer. It saves nothing, and never calls the Service or the Manager |
+| `hooks/register.ts`, Connector | Connector | The only code that calls `$.store`, `$.tool.call`, `$.mcp.call` and the one `$.model` call (R13). Right before `$.tool.call` it makes the second compare (R8), as its own code |
 | `hooks/row.ts` | Support of the Service | Every rule, as pure functions the Service section calls: which call owes a row, its state and preview, the row's shape, reading the lookup's answer. The safety check's pure parts: the last look, the row shape, cleaning, the secret rule, the bare row, and reading the model's answer (R8, R11 to R13). Pure: no imports, no file, network, clock or environment |
 | `hooks/row.ts`, types | Model | The shapes of a waiting row, a row and a checked call |
 
@@ -228,36 +273,66 @@ Who calls the safety check (settles OPEN-010, the planning thread's answer, 2026
 - The one allowed road from a handler to the board is Controller, then Service, then Manager, then Connector. So the Service calls the safety check, and the Controller calls only the Service.
 - The conducting code sits in `hooks/register.ts`, not in `hooks/row.ts`, because `$` can only be passed along inside the module's own file. The rules stay pure functions in `hooks/row.ts`. They are owned support of the one Service (policy 3.1, and 6.2 rule 5), so no other section calls them.
 - **The door is kept by the types and a test.** The last look returns a checked call. It is a branded type that only the last look in `hooks/row.ts` can make. The Manager's and the Connector's write functions accept only that type. TypeScript compares shapes and a cast would get around the brand, so the source test (Section 3) fails on any cast to the checked call type outside `hooks/row.ts`.
-- Only the Service section calls the functions in `hooks/row.ts`. If another section used them, they would be shared support and the policy says to reclassify (3.1). So the Connector's compare in OPEN-016, if Josh approves it, is the Connector's own code.
+- Only the Service section calls the functions in `hooks/row.ts`. If another section used them, they would be shared support and the policy says to reclassify (3.1). So the Connector's second compare (R8, approved by Josh, CTX-051) is the Connector's own code.
 - The types in `hooks/row.ts` are Models. They hold no reference to the functions, because a Model must not depend on support (3.1).
 - No file is added for the safety code.
 
-The board is a page, `board/index.html`, that holds markup and styles only, and five TypeScript files, one per layer (CTX-049). Each file starts with a comment naming its role.
+The Gateway (settles OPEN-015, Josh, CTX-052):
+
+- `hooks/register.ts` gains a section with the role Gateway. It owns the two things that come from outside systems: the model's look and the `get_session` lookup.
+- Why: by the policy a Manager is for the application's own stored data (5.6). A capability an outside system owns, such as a model's answer or Claude's record of a session, belongs to a Gateway (5.5).
+- The road for those two: Service, then Gateway, then Connector. The Connector still makes every `$` call (policy 5.5: a Gateway hands all outbound I/O to a Connector).
+- Saving rows does not move. It stays on the road Service, Manager, Connector. The waiting rows are the plugin's own data.
+- The first question to Josh, at 12:45Z, read that the Gateway "owns every save". That wording was wrong and is not what was decided (CTX-051).
+- The Gateway does not decide what happens to a row. That stays with the Service (policy 5.5: no workflow decisions).
+- Not decided here: in what shape the Gateway hands its answers to the Service. See OPEN-018.
+
+The board is a page, `board/index.html`, that holds markup and styles only, and seven TypeScript files, one per role (CTX-049, CTX-050). Each file starts with a comment naming its role. The table describes the files as merged in pull request 9.
 
 | File | Role | What lives there | May import |
 |---|---|---|---|
-| `board/client.ts` | Client | Drawing rows, the click handler, status text. The only file that touches the document | Service, Connector (see OPEN-017), Transformer, Model |
-| `board/service.ts` | Service | Newest row per thread, Priority rule, day grouping, which rows are past 60 days (IMP-005) | Model |
-| `board/connector.ts` | Connector | The only file that calls the page database | Model |
+| `board/main.ts` | Composition Root | The startup file, and the only place that builds the board's parts and hands each one what it works with (policy 9). It opens the Connector first, which asks the page for its database (see OPEN-019), builds the Manager from it, builds the Service from the Manager, the Transformer's function and the clock, and hands the Client the Service and nothing else. With no page database it hands the Client no Service, and the Client says the list cannot be reached | Connector, Manager, Service, Transformer, Client |
+| `board/client.ts` | Client | Rendering only: the rows, the click and key handlers, the status text. The only file that touches the document. It is handed the Service by `board/main.ts`, so it imports types only | Service, Model |
+| `board/service.ts` | Service | Every board rule: newest row per thread, the Priority rule, day grouping, which rows are past 60 days, the delete budget and the counts (IMP-005). On each update it takes the stored rows from the Manager, tells the Manager which rows to delete, and hands the Client a finished view to render | Manager, Model |
+| `board/manager.ts` | Manager | The Service's only way to the stored rows: watch the rows, mark one seen, remove expired ones. It hands each to the Connector | Connector, Model |
+| `board/connector.ts` | Connector | The only file that calls the page database. It reads the `turns` collection live, writes `seen_at` on a row, and deletes rows one at a time | Model |
 | `board/transformer.ts` | Transformer | Stored row to display row | Model |
-| `board/model.ts` | Model | The stored row, display row and group shapes | Nothing |
+| `board/model.ts` | Model | The stored row, display row, group and view shapes, and the checked type `ExpiredIds` | Nothing |
 
-The page names only the compiled `client.js`. The browser loads the other four through its imports, which the test page showed the page host allows (CTX-049).
+The page names only the compiled `main.js`. The browser loads the other six through its imports, which the test page showed the page host allows (CTX-049).
 
-Roles this scope does not use: Domain, Gateway, Provider (first-party), Contract and Entity. The plugin has no Transformer and no Client. The board has no Controller and no Manager. With no Domain types, each Service holds its rules, as policy Section 5.3 allows.
+How the board's parts are joined (settles OPEN-017, Josh, CTX-050):
 
-Dependencies used. All are inside the policy's allow-list except the board's Client to Connector, which is open (OPEN-017). An earlier text of this table listed Controller to Manager, which is not on the list. That edge is gone.
+- The board's road is Client, then Service, then Manager, then Connector. It is the same road as the plugin's.
+- `board/client.ts` does not import `board/connector.ts` or `board/manager.ts`. Apart from the startup file, only `board/manager.ts` imports `board/connector.ts`.
+- Each part gets what it works with from `board/main.ts`, not by reaching for it (policy 9). The Service is handed the Manager, the Transformer's function and the clock. The Manager is handed the Connector. The Client is handed the Service.
+- The Service imports `board/manager.ts`, the Manager imports `board/connector.ts`, and the Client imports `board/service.ts`, each for its type only.
+- A test, `board/layers.test.ts`, fails when a board file imports a layer outside its row of the table, when `board/client.ts` names the Manager or the Connector, or when a board file is missing from the test's list.
+
+The delete lock, `ExpiredIds` (IMP-005):
+
+- Deleting is the only board code that destroys data. So the list of row ids to delete is a checked type of its own, `ExpiredIds`, in `board/model.ts`.
+- Only `expired()` in `board/service.ts` makes one. It is the function that holds the age rule.
+- The Manager's remove function and the Connector's delete function accept nothing else. So no code can hand the delete a list the age rule did not clear.
+- TypeScript compares shapes, and a cast would get around the type. A test in `board/service.test.ts` fails when any shipped board file casts to `ExpiredIds`, uses `any`, casts through `unknown` or `never`, or switches a type check off, and when any file other than `board/model.ts` and `board/service.ts` names the lock's property.
+- It is the same idea as the plugin's checked call above.
+
+Roles this scope does not use: Domain, Provider (first-party), Contract and Entity. The plugin has no Transformer and no Client. The board has no Controller and no Gateway. With no Domain types, each Service holds its rules, as policy Section 5.3 allows.
+
+Dependencies used. All are inside the policy's allow-list (6.1). Two earlier texts of this table listed edges that are gone: Controller to Manager, and the board's Client to Connector (OPEN-017).
 
 | From | To |
 |---|---|
+| Composition Root | Any role, for startup wiring only |
 | Controller | Service, Model |
-| Service | Manager, Model |
+| Client | Service, Model |
+| Service | Manager, Gateway, Transformer, Model |
 | Manager | Connector, Model |
+| Gateway | Connector, Model |
 | Connector | Model |
-| Client | Service, Connector, Transformer, Model |
 | Transformer | Model |
 
-The time and the thread id are read in `hooks/register.ts` and passed into `hooks/row.ts` as plain values, so the Service reads no clock and no environment.
+The time and the thread id are read in `hooks/register.ts` and passed into `hooks/row.ts` as plain values, so the Service reads no clock and no environment. On the board, `board/main.ts` hands the Service the clock, so `board/service.ts` reads none (Section 6). The board's Service also uses the Transformer: its function is handed in by `board/main.ts`, not imported.
 
 ### 6. External facility mappings
 
@@ -267,12 +342,17 @@ The time and the thread id are read in `hooks/register.ts` and passed into `hook
 | `$.env.get`, `$.clock` | External Provider abstraction | `hooks/register.ts` only. Values are passed in. |
 | `$.store` (the plugin's note) | External Connector facility | Connector section only |
 | `$.tool.call` (`ArtifactData` set on the board) | External Connector facility | Connector section only |
-| `$.mcp.call` (`claude-code-remote` `get_session`) | External Connector facility | Connector section only |
-| One model call, `$.model.complete` or `$.model.classify` (R13) | External Connector facility | Connector section only |
-| `$.tool.list`, `$.ui.log` | Diagnostics | `hooks/register.ts` only |
-| The page database (`claude.use("db")`) | External Connector facility | `board/connector.ts` only |
+| `$.mcp.call` (`claude-code-remote` `get_session`) | External Connector facility | Connector section only, when the Gateway section asks |
+| One model call, `$.model.complete` or `$.model.classify` (R13) | External Connector facility | Connector section only, when the Gateway section asks |
+| `$.ui.log` | Diagnostics | `hooks/register.ts` only |
+| The page database (`claude.use("db")`) | External Connector facility | `board/connector.ts` only. It reads the `turns` collection, writes only `seen_at` on a row, and deletes only rows in `turns` whose ids arrive as `ExpiredIds` (Section 5) |
 | The browser document | Framework response writing | `board/client.ts` only |
-| The browser clock (`Date`) | External Provider abstraction | `board/client.ts` and `board/connector.ts` only. `board/service.ts` gets the time passed in. |
+| The browser clock (`Date`) | External Provider abstraction | Two readers. `board/main.ts` hands the clock (`Date.now`) to the Service, which reads the time through it on each update, for the age rule and the day labels. `board/connector.ts` reads the clock itself, for the `seen_at` time it writes. `board/client.ts` reads no clock. `board/service.ts` reads none of its own: it uses `Date` only for calendar sums on times it was given, in the device's time zone |
+| The browser timer (`setTimeout`) | External Provider abstraction | `board/client.ts` only, for the "still trying" text after 10 seconds |
+
+`$.tool.list` was in this table under Diagnostics. Josh took it off the lasting list (CTX-051, OPEN-011), so the abilities check fails a build that calls it.
+
+The board's clock is not trusted for deleting. A device clock that runs ahead cannot age rows, and at most 200 rows can be deleted per page load. The rules are in IMP-005.
 
 Not allowed in the module: `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt`, `$.session`, `$.agent`, `$.model.fork`, any `$.model` use other than the one call in R13, and any tool call other than the one in R8. Adding one is a trust boundary change: stop and ask Josh.
 
@@ -321,15 +401,15 @@ Josh accepted each of these as a known gap (CTX-040, CTX-043). Each gets its own
 From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/register.ts` at commit `cda4acc`. Josh's answers (T4 q8 for item 7, CTX-043 for item 12, CTX-038 for the rest) are marked on each item. Accepted items are known gaps, each with a Linear issue. Fix items must be fixed in the build-out, each by its own change Josh approves. Every loss is silent to Josh: it shows only in the thread's debug log, `/tmp/claude-code.log`.
 
 1. **Accepted.** The board stays down until the thread's machine is reclaimed. The waiting rows are on that machine and go with it. The plugin makes no network call of its own, so it has nowhere else to put them.
-2. **Fix.** More than 20 rows wait at once. The oldest is dropped and the drop is logged. Fix: raise the limit.
+2. **Fix.** More rows wait at once than the limit allows. The oldest is dropped and the drop is logged. **Fix** (`RUL-3185`): the limit is 500 rows. A build made before `RUL-3185` keeps at most 20.
 3. **Accepted.** Josh stops a thread mid-turn. Claude Code refuses the module's calls until his next message (CTX-034). The row waits and goes out on the next turn, unless the machine is reclaimed first.
-4. **Fix.** A board call that never answers. Turn end stops waiting after 8 seconds. Later writes queue behind the stuck call until Claude Code restarts, then go out from the note. If the machine is reclaimed before that restart, this becomes item 1. **Fix:** give each board write its own time limit, so later rows can go.
+4. **Fix.** A board call that never answers. Turn end stops waiting after 8 seconds. Later writes queue behind the stuck call until Claude Code restarts, then go out from the note. If the machine is reclaimed before that restart, this becomes item 1. **Fix** (`RUL-3186`): each board write gets 5 seconds of its own. Past that it counts as failed, its row is kept and tried again, and later rows go. A build made before `RUL-3186` has no limit per write. If the timed-out write did land, the retry's refusal counts as written (R8).
 5. **Accepted.** Another plugin refuses the module's call on every retry.
 6. **Accepted.** The account moves to a Team or Enterprise plan (NEG-002).
 7. **Accepted.** Ways a thread reaches Josh that no tool call shows: approval prompts, crashes, threads run on his computer, messages sent outside the project app (T4, Josh's q8 accepted these blind spots).
-8. **Fix.** Saving the note fails (logged as `note not saved`), and Claude Code then restarts. The rows held only in memory are lost. Fix: try the save again before moving on.
+8. **Fix.** Saving the note fails (logged as `note not saved`), and Claude Code then restarts. The rows held only in memory are lost. **Fix** (`RUL-3187`): the save is tried again after about 1 second, then about 2, then about 5. If it still fails, that is logged and the rows stay in memory for the next save. A build made before `RUL-3187` does not try that save again.
 9. **Accepted.** Building or storing the row throws (logged as `row not queued`). That row is never stored.
-10. **Fix.** Reading the note fails the first time a row is told or written in a run. The error is swallowed, and the next save overwrites the note, losing rows an earlier run left. Fix: do not save over the note when the read failed. In the T8 build, damaged rows in the note are also dropped silently when it is read. Under R11 a damaged row is not dropped: it goes out as a bare row.
+10. **Fix.** Reading the note fails the first time a row is told or written in a run. The error is swallowed, and the next save overwrites the note, losing rows an earlier run left. **Fix** (`RUL-3188`): after a failed read the note is not saved over until a read has worked, and the failed read is logged. A build made before `RUL-3188` swallows the error and saves over the note. In the T8 build, damaged rows in the note are also dropped silently when it is read. Under R11 a damaged row is not dropped: it goes out as a bare row.
 11. **Accepted.** A turn on a machine the plugin has not reached yet, after an upload or an update (T1: about a minute).
 12. **Accepted.** The board fills up. Its database holds at most 25,000 rows. Past that, every write is expected to fail (read, not tested), rows wait in the note, and they can be lost with the machine (item 1). The busiest hour so far had 44 rows. Eight such hours a day for 60 days is about 21,000 rows, close to the limit. The board shows its use and Josh checks it after 30 days (IMP-005). The board follow-up adds a warning at 80 percent (IMP-002).
 
@@ -344,14 +424,16 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 - **OPEN-007**: Settled 2026-11-22 (CTX-038). Left to do: the four fixes (items 2, 4, 8, 10) and a Linear issue for each accepted gap.
 - **OPEN-008**: Nobody has seen a plugin's model call work in a cloud thread. Step one of the `RUL-3168` build is a test build that makes the call on one harmless line and one made-up key and logs each answer and its time. It needs one upload by Josh. This record allows the model call only after that test passes. If it fails, the plugin makes no model call, this record is changed back before any code (R13), the builder stops and tells Josh first, and the build stays on the code rules alone (R11, R12, R14).
 - **OPEN-009**: How well a small model spots a secret in one line. No trial was run. The secret list has not been tried on real secrets either.
-- **OPEN-010**: Settled 2026-11-22 (Section 5): the Service calls the safety check, the Controller calls only the Service, and the write accepts only a checked call. Two proposals came with that answer and wait on Josh (OPEN-015, OPEN-016).
-- **OPEN-015** (PROPOSED, pending Josh): a Gateway for the model's look. By the policy a Manager is for the application's own stored data (5.6), and an outside capability such as a model's answer belongs to a Gateway (5.5). This record says the scope uses no Gateway. So either the record adds a Gateway section to `hooks/register.ts`, or it records an exception. The same question applies to the `get_session` lookup, which reads data an outside system owns. Until Josh answers, no code for the model's look is written.
-- **OPEN-016** (PROPOSED, pending Josh): a second compare inside the Connector. Right before `$.tool.call` the Connector compares the four fixed things (tool, action, address, list name) with the constants once more, as its own support (policy 3.1). If it ever fails, nothing is written by that call, the failure goes back to the Service, and the Service sends a bare row through the same door. If the bare row also fails the compare, nothing is dropped: the row stays in the note and the failure is logged. Otherwise one wrong constant would lose every row. This is not in the design Josh approved. It adds a check and removes none.
-- **OPEN-011**: Section 3 still lists `$.tool.list`. The safety design does not need it. Dropping it from the lasting list is Josh's call.
+- **OPEN-010**: Settled 2026-11-22 (Section 5): the Service calls the safety check, the Controller calls only the Service, and the write accepts only a checked call. Two proposals came with that answer. Josh said yes to both (OPEN-015, OPEN-016).
+- **OPEN-015**: Settled 2026-11-22 13:02Z (CTX-052): `hooks/register.ts` gains a Gateway section for the model's look and the `get_session` lookup. Saving rows stays on the road Service, Manager, Connector. Josh: "Yes. Save stay with the manager because managers handle the interaction between the persistence layer and any kind of service layer. So that makes sense." The first question, at 12:45Z, read "owns every save". That wording was wrong. See Section 5.
+- **OPEN-016**: Settled 2026-11-22 12:46Z (CTX-051, "Yes to all five."): a second compare inside the Connector, right before `$.tool.call`. If it fails, that call writes nothing and a bare row goes through the same door. If the bare row fails too, the row stays in the note and the failure is logged. See R8.
+- **OPEN-011**: Settled 2026-11-22 12:46Z (CTX-051, "Yes to all five."): `$.tool.list` is off the lasting list. See Sections 3 and 6.
 - **OPEN-012**: Whether a thread's machine is ever reused for another thread. Assumed not. If it is, R11 would turn the other thread's waiting rows into bare rows for this thread.
-- **OPEN-013**: Add only (R8) and a retry. If a write lands but reports a failure, the retry is refused because the row exists. As written, that row would wait forever at the front of the line and could push other rows past the waiting limit. Proposed rule, found in review of `RUL-3192`: a refusal because the row already exists counts as written, since row ids never repeat. It is a change to a row rule, so it needs Josh's yes before `RUL-3168` code.
-- **OPEN-014**: Two points the `RUL-3168` brief must settle, found in the same review. The let-through for Claude's own ids (R12) must match the full id shape, not just the start, or a key glued to `session_` would pass. And which `check` value wins when two apply, and which value a row carries when the look is skipped near turn end (R7).
-- **OPEN-017** (PROPOSED, pending Josh, found in review of `RUL-3204`): the board's Client calls its Connector to delete rows past 60 days and to mark a row seen. Policy 5.2 lets a Client call a Connector only as a thin facade, with no orchestration and no persistence, so this edge does not fit as built. Two ways: (a) add `board/manager.ts`, so the board's road is Client, Service, Manager, Connector, the same road as the plugin's; or (b) an exception ADR. The reviewer and the writer pick (a), because the delete is the only board code that destroys data. Choice (a) changes the board's code and the line "The board has no Controller and no Manager". The same answer should cover policy Section 9: the board has no Composition Root that hands each file its collaborators, and no exception is recorded. Until Josh answers, the board stays as built.
+- **OPEN-013**: Settled 2026-11-22 12:46Z (CTX-051, "Yes to all five."): a board refusal because the row already exists counts as written. Only that one refusal counts. Any other keeps the row waiting, and so does any doubt. See R8, "Already there counts as written". Before this rule, a write that landed but reported a failure would have waited at the front of the line forever.
+- **OPEN-014**: Settled 2026-11-22 by the planning thread, as this point asked, in the safety design (REF-011, section 11, A7). The let-through for Claude's own ids matches the whole id, in the exact length real ids of that kind have, so a key glued to `session_` is hidden. When more than one `check` value applies, the first in this order wins: `bare`, `hidden`, `hidden-ai`, `hidden-noai`, `ok`. A look skipped near turn end (R7) hides the text and gives `hidden-noai`.
+- **OPEN-017**: Settled 2026-11-22 (CTX-050), both halves. At 12:43Z Josh chose (a): "Add helper." The board has `board/manager.ts`, role Manager, and its road is Client, Service, Manager, Connector. At 12:52Z, on a startup file: "Yeah, we should definitely." The board has `board/main.ts`, role Composition Root (policy Section 9). Both are merged in pull request 9. See Section 5.
+- **OPEN-018** (found while writing `RUL-3206`, for the planning thread): in what shape the Gateway hands its answers to the Service. This record keeps the rules that read the lookup's answer and the model's answer in `hooks/row.ts`, and only the Service calls them (Section 5). The policy says a Gateway hands up the application's own shapes, not the outside system's (5.5). The two fit if the Gateway's answer is already a plain application shape, or if the reading moves. Neither is decided here. It must be settled before any Gateway code. If the answer changes who may call `hooks/row.ts`, it needs Josh's yes.
+- **OPEN-019** (found in review of `RUL-3206`, for the planning thread): the startup file asks for the database before it wires the parts. `board/main.ts` waits for `openBoard()`, which calls `claude.use('db')`, and the answer decides the wiring: no database, no Service. Policy 5.13 says a Composition Root does no external I/O beyond the framework's own startup setup, and that remote calls at startup run after the parts are built. Calling the board's own Connector is allowed (policy Section 7). Whether `claude.use('db')` counts as framework setup or as a call to the host is not shown either way. So this record does not say 5.13 is met. A fix would be a code change, with its own issue and Josh's yes.
 
 ## Alternatives Considered
 
@@ -432,6 +514,15 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 - **IMP-003**: A row holds the thread id, title, project name, state, time, a one-line preview and a link. It also holds `build`, `check` and, when above zero, `dropped` (R4, R14). No prompts, full replies or tool input are stored. The T8 build also writes `gate: "t8-plugin"` as a test marker.
 - **IMP-004**: Install: remove any older Thread Queue plugin (`thread-queue-turnstile`), then upload the `thread-queue` zip on the account Plugins page. Two Thread Queue plugins at once spoil the proof and bring the gate back.
 - **IMP-005**: The board removes rows older than 60 days (Josh, CTX-042). Only rows in the board's own database are ever deleted, never anything in a thread. Its database holds at most 25,000 rows. The board shows how much of that is in use, and Josh checks it after 30 days.
+  - The delete and clock rules, as built in `board/service.ts` and merged in pull request 9. Josh asked for them to be written here (CTX-052).
+  - **Age from the earlier clock.** A row's age is counted back 60 days from the earlier of two times: the device's clock, and the newest time on any row. So a device clock that runs ahead cannot make rows look old, and a long quiet spell does not age rows: only a row more than 60 days older than the newest row can be deleted. If no row has a time that can be read, the device's clock is used, and then the next rule leaves nothing to delete.
+  - **No delete without a readable time.** A row whose time cannot be read is never deleted. As built, it is not shown in the list either, and it still counts in the storage figure. The board follow-up (IMP-002) gives odd rows a group of their own.
+  - **At most 200 deletes per page load.** The Service keeps a budget of 200 for the life of the page, across every update. Each row id it hands over for delete comes off the budget, whether or not the delete works. An id handed over again on a later update, because its delete is still running or failed, comes off the budget again. So one page load can remove at most 200 rows, and it can be fewer. A reload starts a new budget.
+  - A row past 60 days leaves the list at once, even when its delete has to wait for a later page load.
+  - **Only the age rule clears a row for delete.** The ids travel as the checked type `ExpiredIds` (Section 5).
+  - **One at a time, board rows only.** The Connector deletes one row at a time, each at `turns/` plus its id, and skips an id it is already deleting or has deleted in this page load. A delete that failed may be tried again on a later update while budget is left, or on the next page load.
+  - **Who reads the clock.** `board/main.ts` hands the clock to the Service. The Service reads no clock of its own (Section 6).
+  - Tests for each rule are in `board/service.test.ts`, `board/layers.test.ts` and `board/manager.test.ts`.
 - **IMP-006**: Work is assigned under the Agent Routing and Capacity Contract v0.9. Josh approves each issue and its tier before work starts. Agents do not merge pull requests. A Haiku worker makes all Linear writes from an exact spec. Any change to what the module may call (Section 6) is a Specialist trigger.
 - **IMP-009** (for NEG-009, approved by Josh, CTX-044): every row carries the version of the build that wrote it. Row shape changes are additions only, and the board reads every older shape. The waiting-rows note stays readable by the next build. After an upload, the board can show which build wrote each thread's newest row.
 - **IMP-007**: Success is the Milestone 2 check: threads in at least three projects finish turns within the same few minutes and all show on the board, and one week of use gives a count of missed turns.
