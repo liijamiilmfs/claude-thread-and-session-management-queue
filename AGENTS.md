@@ -69,7 +69,8 @@ Rules a reviewer checks:
 
 - `hooks/row.ts` holds every row rule. It imports nothing, does no file or network access, and reads no clock and no environment. Time and the thread id are passed in.
 - The Controller section calls only the Service section. The Service section runs the safety check and decides the order of steps. The Manager and the Connector never call it.
-- The last look returns a checked call. The Manager's and the Connector's write functions accept only that type.
+- The last look returns a checked call, a branded type only `hooks/row.ts` can make. The Manager's and the Connector's write functions accept only that type. No cast to it appears outside `hooks/row.ts`.
+- Only the Service section calls the functions in `hooks/row.ts`.
 - The Service section passes `$` on and never calls anything on it.
 - Only the Connector section of `hooks/register.ts` calls `$.store`, `$.tool.call`, `$.mcp.call` and the one `$.model` call.
 - `$.tool.call(` appears once in `hooks/register.ts`. `$.model.` appears once. `$.model.fork` never appears.
