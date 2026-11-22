@@ -105,6 +105,8 @@ test('shipped board code has no escape hatches around the delete lock', () => {
   const names = files.map(f => f.name);
   assert.ok(['connector.ts', 'manager.ts', 'client.ts', 'service.ts', 'main.ts'].every(n => names.includes(n))); // scanning the right files
   for (const { name, src } of files) for (const [re, what] of BANNED) assert.doesNotMatch(src, re, `${name} uses ${what}`);
+  // the lock is a property called `cleared`: nobody else may build or name one
+  for (const { name, src } of files) if (name !== 'model.ts' && name !== 'service.ts') assert.doesNotMatch(src, /\bcleared\b/, `${name} mentions the lock property`);
 });
 
 test('the lock test catches a cast to any on the way into removeRows', () => {
