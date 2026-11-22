@@ -236,7 +236,7 @@ The board is a page, `board/index.html`, that holds markup and styles only, and 
 
 | File | Role | What lives there | May import |
 |---|---|---|---|
-| `board/client.ts` | Client | Drawing rows, the click handler, status text. The only file that touches the document | Service, Connector, Transformer, Model |
+| `board/client.ts` | Client | Drawing rows, the click handler, status text. The only file that touches the document | Service, Connector (see OPEN-017), Transformer, Model |
 | `board/service.ts` | Service | Newest row per thread, Priority rule, day grouping, which rows are past 60 days (IMP-005) | Model |
 | `board/connector.ts` | Connector | The only file that calls the page database | Model |
 | `board/transformer.ts` | Transformer | Stored row to display row | Model |
@@ -246,7 +246,7 @@ The page names only the compiled `client.js`. The browser loads the other four t
 
 Roles this scope does not use: Domain, Gateway, Provider (first-party), Contract and Entity. The plugin has no Transformer and no Client. The board has no Controller and no Manager. With no Domain types, each Service holds its rules, as policy Section 5.3 allows.
 
-Dependencies used, all inside the policy's allow-list. An earlier text of this table listed Controller to Manager, which is not on the list. That edge is gone.
+Dependencies used. All are inside the policy's allow-list except the board's Client to Connector, which is open (OPEN-017). An earlier text of this table listed Controller to Manager, which is not on the list. That edge is gone.
 
 | From | To |
 |---|---|
@@ -272,6 +272,7 @@ The time and the thread id are read in `hooks/register.ts` and passed into `hook
 | `$.tool.list`, `$.ui.log` | Diagnostics | `hooks/register.ts` only |
 | The page database (`claude.use("db")`) | External Connector facility | `board/connector.ts` only |
 | The browser document | Framework response writing | `board/client.ts` only |
+| The browser clock (`Date`) | External Provider abstraction | `board/client.ts` and `board/connector.ts` only. `board/service.ts` gets the time passed in. |
 
 Not allowed in the module: `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt`, `$.session`, `$.agent`, `$.model.fork`, any `$.model` use other than the one call in R13, and any tool call other than the one in R8. Adding one is a trust boundary change: stop and ask Josh.
 
@@ -350,6 +351,7 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 - **OPEN-012**: Whether a thread's machine is ever reused for another thread. Assumed not. If it is, R11 would turn the other thread's waiting rows into bare rows for this thread.
 - **OPEN-013**: Add only (R8) and a retry. If a write lands but reports a failure, the retry is refused because the row exists. As written, that row would wait forever at the front of the line and could push other rows past the waiting limit. Proposed rule, found in review of `RUL-3192`: a refusal because the row already exists counts as written, since row ids never repeat. It is a change to a row rule, so it needs Josh's yes before `RUL-3168` code.
 - **OPEN-014**: Two points the `RUL-3168` brief must settle, found in the same review. The let-through for Claude's own ids (R12) must match the full id shape, not just the start, or a key glued to `session_` would pass. And which `check` value wins when two apply, and which value a row carries when the look is skipped near turn end (R7).
+- **OPEN-017** (PROPOSED, pending Josh, found in review of `RUL-3204`): the board's Client calls its Connector to delete rows past 60 days and to mark a row seen. Policy 5.2 lets a Client call a Connector only as a thin facade, with no orchestration and no persistence, so this edge does not fit as built. Two ways: (a) add `board/manager.ts`, so the board's road is Client, Service, Manager, Connector, the same road as the plugin's; or (b) an exception ADR. The reviewer and the writer pick (a), because the delete is the only board code that destroys data. Choice (a) changes the board's code and the line "The board has no Controller and no Manager". The same answer should cover policy Section 9: the board has no Composition Root that hands each file its collaborators, and no exception is recorded. Until Josh answers, the board stays as built.
 
 ## Alternatives Considered
 

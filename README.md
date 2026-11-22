@@ -58,7 +58,7 @@ Agent and contributor rules are in `AGENTS.md`.
 |---|---|
 | `docs/adr/` | Decision records |
 | `docs/agent-routing-contract.md` | A synced copy of the Rule 0 Softworks routing contract. Do not edit it here. |
-| `.claude-plugin/`, `hooks/` | Planned: the plugin |
+| `.claude-plugin/`, `hooks/` | The plugin. The row rules and their tests are in `hooks/row.ts`. The rest is planned. |
 | `board/` | Planned: the board page |
 
 ## Limits
