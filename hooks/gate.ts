@@ -4,10 +4,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { BOARD as DEFAULT_BOARD, LIMITS, STATES, threadOf } from './approve.ts';
 
-const DEFAULT_BOARD = 'https://claude.ai/artifact/ByotUv4ViCSyFxtHF5cbNG';
 const MAX_BLOCKS = 2;
-const STATES = ['needs_you', 'review', 'finished', 'failed'];
 const MIN_NODE = [24, 22, 3];
 
 type Via = 'option' | 'env' | 'default';
@@ -63,13 +62,14 @@ export function decide(input: HookInput, ctx: Ctx, state: State): Result {
     thread: ctx.thread, title: "<this thread's title>", project: "<this project's name>",
     state: '<one of: ' + STATES.join(', ') + '>', updated_at: ctx.now.toISOString(),
     preview: '<one line: what you just told the person>', url: 'https://claude.ai/code/' + ctx.thread,
-    gate: 'm0-plugin', mode: input.permission_mode ?? 'unknown', node: ctx.node, via: ctx.via,
+    gate: 't7-plugin', mode: input.permission_mode ?? 'unknown', node: ctx.node, via: ctx.via,
   };
   const reason =
     "Thread Queue gate: this turn cannot end until the thread's row is written. " +
     'Call ArtifactData with action "set", url "' + ctx.board + '", collection "turns", doc_id "' +
     ctx.thread + '.' + ctx.now.getTime() + '", and data ' + JSON.stringify(row) +
-    ' (fill in the four <...> values, keep the rest exactly). Then end the turn the usual way.';
+    ' (fill in the four <...> values, keep the rest exactly, add no other field or argument; title at most ' +
+    LIMITS.title + ' characters, preview at most ' + LIMITS.preview + '). Then end the turn the usual way.';
   return { state: { ...state, blocks: state.blocks + 1 }, out: { decision: 'block', reason } };
 }
 
@@ -79,7 +79,7 @@ function main(): void {
   const file = join(input.scratchpad_dir || tmpdir(), 'thread-queue-gate.json');
   let state: State = { owed: false, reported: false, blocks: 0 };
   try { state = { ...state, ...JSON.parse(readFileSync(file, 'utf8')) }; } catch {}
-  const thread = String(process.env.CLAUDE_CODE_REMOTE_SESSION_ID || input.session_id || 'unknown').replace(/^cse_/, 'session_');
+  const thread = threadOf(String(process.env.CLAUDE_CODE_REMOTE_SESSION_ID || input.session_id || 'unknown'));
   const result = decide(input, { ...pickBoard(process.env), thread, now: new Date(), node: process.version }, state);
   if (result.state) writeFileSync(file, JSON.stringify(result.state));
   if (result.out) process.stdout.write(JSON.stringify(result.out));

@@ -1,7 +1,7 @@
 {
   "name": "thread-queue-turnstile",
-  "version": "0.0.0-m0",
-  "description": "Milestone 0 test build of the Thread Queue gate. Not for real use.",
+  "version": "0.0.0-t7",
+  "description": "Milestone 0 test build of the Thread Queue gate, with the T7 board row approval. Not for real use.",
   "userConfig": {
     "board_url": {
       "type": "string",

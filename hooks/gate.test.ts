@@ -21,7 +21,7 @@ test('a turn that told the person something cannot end without a row write', () 
   assert.equal(owed.owed, true);
   const r = decide(stop, ctx, owed);
   assert.equal(r.out?.decision, 'block');
-  assert.match(r.out!.reason, /"gate":"m0-plugin","mode":"auto","node":"v24.22.3","via":"default"/);
+  assert.match(r.out!.reason, /"gate":"t7-plugin","mode":"auto","node":"v24.22.3","via":"default"/);
 });
 
 test('a valid row write lets the turn end', () => {
