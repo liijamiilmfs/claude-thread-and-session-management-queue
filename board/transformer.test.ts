@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { toDisplay } from './transformer.ts';
 
 
+const at = (iso: string) => ({ state: 'finished', updated_at: iso });
+
 // One made-up row of each shape the board must read.
 const old = { thread: 's1', title: 'Old shape', state: 'finished', updated_at: '2026-11-22T09:00:00Z', preview: 'p', url: 'https://claude.ai/code/s1' };
 const t8 = { ...old, thread: 's2', project: 'Proj', gate: 't8-plugin' };
