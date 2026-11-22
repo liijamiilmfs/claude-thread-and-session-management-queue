@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 // Approved lists. RUL-3168 replaces these with the lasting list in ADR-0001 section 3.
 const approved: Record<string, string> = {
@@ -25,3 +26,9 @@ test(
     assert.deepEqual(found, approved);
   },
 );
+
+// Needs no claude command, so CI runs it. Catches what validate cannot see: plain fetch, process, eval, imports.
+test('the empty module has no import, no outside call and no hook', () => {
+  const src = readFileSync(new URL('./register.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /^\s*import\b|\brequire\(|\bimport\(|\bfetch\(|\bprocess\.|\beval\(|\bon\(/m);
+});
