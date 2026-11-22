@@ -9,7 +9,7 @@ import { hasDocument, startClient } from './client.ts';
 async function main(): Promise<void> {
   const board = await openBoard();
   const manager = board && createManager(board);
-  startClient({ service: manager && createService({ manager, toDisplay, now: Date.now }) });
+  startClient({ service: manager && createService({ manager, toDisplay, now: Date.now, wait: ms => new Promise(done => setTimeout(done, ms)) }) });
 }
 
 if (hasDocument()) void main();

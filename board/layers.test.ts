@@ -12,10 +12,10 @@ function fake(docs: StoredDoc[]) {
   const calls = { removed: [] as string[][], seen: [] as string[] };
   const manager: Manager = {
     watchRows: (onRows) => onRows(docs),
-    markRowSeen: id => { calls.seen.push(id); },
+    markRowSeen: async id => { calls.seen.push(id); },
     removeRows: async ids => { calls.removed.push([...ids]); },
   };
-  return { calls, service: createService({ manager, toDisplay, now: () => NOW }) };
+  return { calls, service: createService({ manager, toDisplay, now: () => NOW, wait: async () => {} }) };
 }
 
 const doc = (id: string, thread: string, updated_at: string, state = 'finished'): StoredDoc => ({ id, row: { thread, state, updated_at } });
@@ -44,10 +44,10 @@ test('a clock far ahead of the rows deletes nothing', () => {
 
 test('clicks and errors pass through', () => {
   const calls = { seen: [] as string[], err: [] as string[] };
-  const manager: Manager = { watchRows: (_ok, bad) => bad('boom'), markRowSeen: id => { calls.seen.push(id); }, removeRows: async () => {} };
-  const service = createService({ manager, toDisplay, now: () => NOW });
+  const manager: Manager = { watchRows: (_ok, bad) => bad('boom'), markRowSeen: async id => { calls.seen.push(id); }, removeRows: async () => {} };
+  const service = createService({ manager, toDisplay, now: () => NOW, wait: async () => {} });
   service.watch(() => {}, c => calls.err.push(c));
-  service.markSeen('a');
+  void service.markSeen('a', () => {});
   assert.deepEqual([calls.seen, calls.err], [['a'], ['boom']]);
 });
 
@@ -76,4 +76,50 @@ test('the Client never gets the Manager', () => {
 test('no shipped file is missing from the allow-list', () => {
   const shipped = readdirSync(new URL('.', import.meta.url)).filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts'));
   assert.deepEqual(shipped.sort(), Object.keys(ALLOWED).sort());
+});
+
+// Saving the seen mark: a refused save is retried with waits, then reported.
+function seenService(failures: number) {
+  const waits: number[] = [];
+  let tries = 0, failed = 0, saved = 0;
+  const manager: Manager = {
+    watchRows: () => {}, removeRows: async () => {},
+    markRowSeen: async () => { tries++; if (tries <= failures) throw new Error('refused'); },
+  };
+  const service = createService({ manager, toDisplay, now: () => NOW, wait: async ms => { waits.push(ms); } });
+  const run = async () => { void service.markSeen('a', ok => { if (ok) saved++; else failed++; }); await new Promise(r => setImmediate(r)); };
+  return { run, get waits() { return waits; }, get tries() { return tries; }, get failed() { return failed; }, get saved() { return saved; } };
+}
+
+test('a seen save that works first time makes one try and no note', async () => {
+  const s = seenService(0);
+  await s.run();
+  assert.deepEqual([s.tries, s.waits, s.failed, s.saved], [1, [], 0, 1]);
+});
+
+test('a refused seen save is tried again after 1, 2 and 5 seconds and then works', async () => {
+  const s = seenService(3);
+  await s.run();
+  assert.deepEqual([s.tries, s.waits, s.failed, s.saved], [4, [1000, 2000, 5000], 0, 1]);
+});
+
+test('a seen save that keeps failing stops after four tries and reports once', async () => {
+  const s = seenService(99);
+  await s.run();
+  assert.deepEqual([s.tries, s.waits, s.failed, s.saved], [4, [1000, 2000, 5000], 1, 0]);
+});
+
+test('the Client marks a row only on a mouse press of a linked row, or a finished click or key', () => {
+  const src = readFileSync(new URL('client.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /mousedown|mouseup|touchstart|touchend/);
+  assert.equal(src.match(/service\.markSeen\(/g)?.length, 1);
+  assert.match(src, /if \(r\.link\) a\.addEventListener\('pointerdown', e => \{ if \(e\.pointerType === 'mouse' && e\.button === 0 && !e\.ctrlKey && !e\.altKey\) markOnce\(\); \}\);/);
+  // the other press listeners only hold back redraws; they never mark a row
+  assert.equal(src.match(/addEventListener\('pointer(down|up|cancel)'/g)?.length, 4);
+});
+
+test('the Client never stops a link from opening, and opens nothing itself', () => {
+  const src = readFileSync(new URL('client.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /window\.open|\.click\(\)|location\./);
+  assert.equal(src.match(/preventDefault/g)?.length, 1); // only on the key press of a row with no link
 });

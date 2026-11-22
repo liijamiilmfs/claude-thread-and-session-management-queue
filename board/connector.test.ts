@@ -17,3 +17,9 @@ test('a handle with collection and doc is accepted', async () => {
   assert.notEqual(await openBoard(), null);
   (globalThis as { claude?: unknown }).claude = undefined;
 });
+
+test('a refused seen save is passed up, not swallowed', async () => {
+  (globalThis as any).claude = { use: async () => ({ collection: () => ({ onSnapshot: () => {} }), doc: () => ({ update: async () => { throw new Error('refused'); }, delete: async () => {} }) }) };
+  const board = (await openBoard())!;
+  await assert.rejects(board.markSeen('a'), /refused/);
+});

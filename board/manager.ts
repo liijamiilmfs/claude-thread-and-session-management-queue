@@ -4,7 +4,7 @@ import type { Board } from './connector.ts';
 
 export type Manager = {
   watchRows(onRows: (docs: StoredDoc[]) => void, onError: (code: string) => void): void;
-  markRowSeen(docId: string): void;
+  markRowSeen(docId: string): Promise<void>;
   removeRows(docIds: ExpiredIds): Promise<void>;
 };
 

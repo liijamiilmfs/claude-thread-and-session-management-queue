@@ -17,7 +17,7 @@ function isDb(x: unknown): x is Db {
 
 export type Board = {
   subscribe(onRows: (docs: StoredDoc[]) => void, onError: (code: string) => void): void;
-  markSeen(docId: string): void;
+  markSeen(docId: string): Promise<void>; // rejects when the database refuses the save
   deleteRows(docIds: ExpiredIds): Promise<void>;
 };
 
@@ -29,7 +29,7 @@ export async function openBoard(): Promise<Board | null> {
     subscribe: (onRows, onError) => db.collection('turns').onSnapshot(
       snap => onRows(snap.docs.map(d => ({ id: d.id, row: d.data() ?? {} }))),
       e => onError(e?.code ?? 'error')),
-    markSeen: docId => { db.doc('turns/' + docId).update({ seen_at: new Date().toISOString() }).catch(() => {}); },
+    markSeen: async docId => { await db.doc('turns/' + docId).update({ seen_at: new Date().toISOString() }); },
     // Board rows only: every path is in the turns collection of this page's own database.
     deleteRows: async docIds => {
       for (const id of docIds) {
