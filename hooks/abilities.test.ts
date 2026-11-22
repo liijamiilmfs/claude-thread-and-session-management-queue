@@ -15,6 +15,9 @@ const approved: Record<string, string> = {
 // There the test runs that exact file, never a "claude" found by name, and a missing one fails. It never skips.
 const inCI = Boolean(process.env.CI);
 const bin = process.env.CLAUDE_BIN;
+// The whole "Provides:" list of `claude plugin validate`. One hooks module and nothing else.
+const approvedProvides = ['modules: hooks/register.ts'];
+
 const run = spawnSync(bin ?? 'claude', ['plugin', 'validate', '.'], { encoding: 'utf8' });
 const missing = run.error !== undefined;
 
@@ -31,8 +34,21 @@ test(
       found[m[1]!] = m[2]!.trim();
     }
     assert.deepEqual(found, approved);
+    // Everything the plugin provides, not only the module's lines. A command hook in hooks.json or
+    // plugin.json, a second hooks file, a command, a skill or a server would show up here.
+    const provides = /^Provides:\n\n((?:[ \t]*[>❯] .*\n)+)/mu.exec(run.stdout)?.[1] ?? '';
+    assert.deepEqual(
+      provides.split('\n').filter(Boolean).map((line) => line.replace(/^\s*[>❯] /u, '')),
+      approvedProvides,
+    );
   },
 );
+
+// Needs no claude command. The hooks file names the one module and nothing else, so no command hook sits beside it.
+test('hooks.json names only the one module', () => {
+  const hooksFile: unknown = JSON.parse(readFileSync(new URL('./hooks.json', import.meta.url), 'utf8'));
+  assert.deepEqual(hooksFile, { modules: ['./register.ts'] });
+});
 
 // Needs no claude command, so CI runs it. Catches what validate cannot see: plain fetch, process, eval, imports.
 test('the empty module has no import, no outside call and no hook', () => {
