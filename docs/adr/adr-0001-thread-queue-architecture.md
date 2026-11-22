@@ -231,7 +231,7 @@ From T8, "What can still lose a row", and the T8 reviewer:
 
 ### Open, not proven
 
-- **OPEN-001**: Project name. The first live rows had no project, because the parent's record comes wrapped (CTX-025). The fix is in build `0.0.1-t8` (commit `cda4acc` on the T8 branch), not yet swapped in by Josh. No live row with a project name has been seen.
+- **OPEN-001**: Project name. The first live rows had no project, because the parent's record comes wrapped (CTX-025). The fix is in build `0.0.1-t8` (commit `cda4acc` on the T8 branch). Josh installed it at 2026-11-22 09:04Z. It is waiting on a live check: no row with a project name has been confirmed yet.
 - **OPEN-002**: The state rule. Josh's T4 answer q6 was that the thread picks the label every time. With no model involved, code picks it (R10). This conflicts with q6 and has not been put to Josh. It is not settled by this record.
 - **OPEN-003**: A failed write kept and retried is shown only by unit tests, not live.
 - **OPEN-004**: The log line `Skipping auto mode classifier for ArtifactData: called by plugin thread-queue` was read only in the T8 thread's own log. For the other four threads with rows, the proof is the rows landing and, for Josh's test thread, no `ArtifactData` call by the model in its transcript.
