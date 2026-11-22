@@ -1,8 +1,17 @@
-// Client: the only file that touches the document. Depends on Service, Manager, Transformer and Model. (ADR-0001 section 5)
+// Client: the only file that touches the document. It is handed everything it uses by main.ts, so it imports types only.
 import type { DisplayRow } from './model.ts';
-import { toDisplay } from './transformer.ts';
-import { expired, groups, MAX_DELETES, ROW_LIMIT } from './service.ts';
-import { openManager, type Manager } from './manager.ts';
+import type * as Service from './service.ts';
+import type { toDisplay } from './transformer.ts';
+import type { Manager } from './manager.ts';
+
+export type Deps = {
+  manager: Manager | null; // null: the page database is out of reach
+  service: typeof Service;
+  toDisplay: typeof toDisplay;
+  now: () => number;
+};
+
+export const hasDocument = (): boolean => typeof document !== 'undefined';
 
 function el(tag: string, cls?: string, text?: string): HTMLElement {
   const n = document.createElement(tag);
@@ -28,19 +37,19 @@ function rowNode(r: DisplayRow, manager: Manager): HTMLElement {
   return a;
 }
 
-async function start(): Promise<void> {
+export function startClient({ manager, service, toDisplay, now }: Deps): void {
+  const { expired, groups, MAX_DELETES, ROW_LIMIT } = service;
   let deleteBudget = MAX_DELETES; // across every update of this page load
   const status = document.getElementById('status')!;
   const box = document.getElementById('list')!;
-  const manager = await openManager();
   if (!manager) { status.textContent = 'This view cannot reach the list. Open the page inside Claude, signed in.'; return; }
   const slow = setTimeout(() => { status.textContent = 'The list cannot be reached yet. Still trying.'; }, 10000);
   manager.watchRows(docs => {
     clearTimeout(slow);
     const all = docs.map(d => toDisplay(d.id, d.row));
-    const now = Date.now();
-    const shown = groups(all, now);
-    const gone = expired(all, now, deleteBudget);
+    const t = now();
+    const shown = groups(all, t);
+    const gone = expired(all, t, deleteBudget);
     deleteBudget -= gone.length;
     void manager.removeRows(gone);
     box.replaceChildren(...shown.map(g => {
@@ -54,5 +63,3 @@ async function start(): Promise<void> {
     status.textContent = count ? `${count} threads. ${waiting} waiting on you. ${stored}` : `No thread has reported yet. ${stored}`;
   }, code => { clearTimeout(slow); status.textContent = `The list stopped updating (${code}). Reload the page.`; });
 }
-
-if (typeof document !== 'undefined') void start();

@@ -1,9 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { openManager } from './manager.ts';
+import { createManager } from './manager.ts';
+import { openBoard } from './connector.ts';
 import type { ExpiredIds } from './model.ts';
 
 // A stand-in for the page database, recording every call.
+// What main.ts does: build the Connector, hand it to the Manager.
+async function openManager() {
+  const board = await openBoard();
+  return board && createManager(board);
+}
+
 function fakeDb(rows: Record<string, object>, failDeletes = 0) {
   let toFail = failDeletes;
   const calls: string[] = [];

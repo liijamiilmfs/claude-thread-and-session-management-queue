@@ -1,6 +1,6 @@
-// Manager: the Client's only way to the stored rows. Depends on Connector and Model. (ADR-0001 section 5)
+// Manager: the Client's only way to the stored rows. It is handed a Connector by main.ts. Depends on Connector (type) and Model. (ADR-0001 section 5)
 import type { ExpiredIds, StoredDoc } from './model.ts';
-import { openBoard } from './connector.ts';
+import type { Board } from './connector.ts';
 
 export type Manager = {
   watchRows(onRows: (docs: StoredDoc[]) => void, onError: (code: string) => void): void;
@@ -8,8 +8,6 @@ export type Manager = {
   removeRows(docIds: ExpiredIds): Promise<void>;
 };
 
-export async function openManager(): Promise<Manager | null> {
-  const board = await openBoard();
-  if (!board) return null;
+export function createManager(board: Board): Manager {
   return { watchRows: board.subscribe, markRowSeen: board.markSeen, removeRows: board.deleteRows };
 }
