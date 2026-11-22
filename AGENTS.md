@@ -154,10 +154,11 @@ Run `npm test` (Node's built-in test runner, files named `*.test.ts`) and `npm r
 |---|---|---|
 | `install` | `npm ci` | |
 | `format` | Not defined yet | Added by `RUL-3166` |
-| `lint` | `claude plugin validate .` | Needs the `claude` command. CI does not have it, so run it on your own machine. |
+| `lint` | `claude plugin validate .` | Needs the `claude` command. CI installs version 2.1.330, checked against a recorded hash, and the abilities test runs that exact file (`CLAUDE_BIN`). In CI a missing command fails the run. On other machines the test reports itself as skipped. |
 | `typecheck` | `npm run typecheck` | Runs `tsc`, emits nothing |
 | `test` | `npm test` | Runs `node --test` |
-| `verify PR` | CI workflow | Typecheck plus test. Lint to come with `RUL-3166` |
+| `build board` | `npm run build:board` | Compiles the board's files. CI runs it on every pull request |
+| `verify PR` | CI workflow | Typecheck, board build and test. The test step runs the abilities check with the `claude` command |
 | `verify release` | Does not apply | Nothing is packaged or published from this repository yet |
 | `audit` | Code review against ADR-0001 | No automated architecture check. Compare the `claude plugin validate .` list with ADR-0001 Section 3. |
 
