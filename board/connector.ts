@@ -6,6 +6,11 @@ type Db = {
   doc(path: string): { update(data: object): Promise<unknown>; delete(): Promise<unknown> };
 };
 
+// The page host puts `claude` on the global object. Declared here so no cast is needed to reach it.
+declare global {
+  var claude: { use?: (name: string) => Promise<unknown> } | undefined;
+}
+
 export type Board = {
   subscribe(onRows: (docs: StoredDoc[]) => void, onError: (code: string) => void): void;
   markSeen(docId: string): void;
@@ -13,8 +18,9 @@ export type Board = {
 };
 
 export async function openBoard(): Promise<Board | null> {
-  const db: Db | null = (await (globalThis as any).claude?.use?.('db')) ?? null;
-  if (!db) return null;
+  const found = await globalThis.claude?.use?.('db'); // null or missing when the page has no database
+  if (!found) return null;
+  const db = found as Db; // the host's database handle: the one place its shape is taken on trust
   const inFlight = new Set<string>(); // each deletion changes the list, so skip ids already being deleted
   return {
     subscribe: (onRows, onError) => db.collection('turns').onSnapshot(

@@ -56,7 +56,7 @@ test('the rest are grouped by day', () => {
 
 test('a clock far in the future deletes nothing', () => {
   const rows = [toDisplay('a', { thread: 't', ...at('2026-11-20T00:00:00Z') }), toDisplay('b', { thread: 'u', ...at('2026-11-21T00:00:00Z') })];
-  assert.deepEqual(expired(rows, Date.parse('2030-01-01T00:00:00Z')), []);
+  assert.equal(expired(rows, Date.parse('2030-01-01T00:00:00Z')).length, 0);
 });
 
 test('a clock 30 days ahead cannot age rows: 450 rows of 40 days, 1 fresh row', () => {
@@ -81,15 +81,43 @@ test('deletes are capped by the budget the caller passes in', () => {
 });
 
 // The delete lock: TypeScript compares shapes, so a cast would get around the checked type.
-// This fails on any cast to ExpiredIds in shipped code outside service.ts (tests may cast to fake a list).
-test('nothing outside service.ts casts to ExpiredIds', () => {
+// Shipped board code (not tests) must not cast to ExpiredIds, use `any` or `unknown` casts, or switch off type checks.
+// Only service.ts may make an ExpiredIds, and only with Object.assign.
+function code(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, ''); // comments may use the words
+}
+
+const BANNED: [RegExp, string][] = [
+  [/\bany\b/, 'any'],
+  [/\bas\s+(?:unknown|never)\b/, 'as unknown or as never'],
+  [/\bas\s+ExpiredIds\b|<\s*ExpiredIds\s*>\s*[\w(\[]/, 'a cast to ExpiredIds'],
+  [/@ts-(?:ignore|expect-error|nocheck)/, 'a type check switch-off'],
+];
+
+function shipped(): { name: string; src: string }[] {
   const dir = new URL('./', import.meta.url);
-  const files = readdirSync(dir).filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'service.ts');
-  assert.ok(files.includes('connector.ts') && files.includes('manager.ts') && files.includes('client.ts')); // the scan is looking at the right files
-  for (const f of files) {
-    const src = readFileSync(new URL(f, dir), 'utf8');
-    assert.doesNotMatch(src, /\bas\s+(?:unknown\s+as\s+)?ExpiredIds\b|<\s*ExpiredIds\s*>\s*[\w(\[]/, f + ' casts to ExpiredIds');
+  return readdirSync(dir).filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+    .map(name => ({ name, src: code(readFileSync(new URL(name, dir), 'utf8')) }));
+}
+
+test('shipped board code has no escape hatches around the delete lock', () => {
+  const files = shipped();
+  const names = files.map(f => f.name);
+  assert.ok(['connector.ts', 'manager.ts', 'client.ts', 'service.ts', 'main.ts'].every(n => names.includes(n))); // scanning the right files
+  for (const { name, src } of files) for (const [re, what] of BANNED) assert.doesNotMatch(src, re, `${name} uses ${what}`);
+});
+
+test('the lock test catches a cast to any on the way into removeRows', () => {
+  const bad = code("void manager.removeRows(['x'] as any);\nconst y = z as unknown as ExpiredIds; // ok in a comment? no, code\n");
+  assert.ok(BANNED.some(([re]) => re.test(bad)));
+  assert.match(bad, /as any/);
+  for (const sample of ["f(['x'] as any)", 'f(<any>ids)', 'let v: any = 1', 'x as unknown as ExpiredIds', 'x as ExpiredIds', '// @ts-ignore\nf(1)']) {
+    assert.ok(BANNED.some(([re]) => re.test(sample)), sample + ' was not caught');
   }
-  // and the one place that makes it still does
-  assert.match(readFileSync(new URL('service.ts', dir), 'utf8'), /as unknown as ExpiredIds/);
+  assert.ok(!BANNED.some(([re]) => re.test(code('// a comment about any cast\nconst ok = 1;'))));
+});
+
+test('the only ExpiredIds is made inside service.ts', () => {
+  const src = code(readFileSync(new URL('service.ts', import.meta.url), 'utf8'));
+  assert.match(src, /Object\.assign\(ids, \{ cleared: 'expired' as const \}\)/);
 });

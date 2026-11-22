@@ -17,7 +17,8 @@ export const MAX_DELETES = 200; // per page load: the Client passes in what is l
 // Board rows to delete: older than MAX_AGE_DAYS by the rule above, at most `budget`. A row with no readable time is never deleted.
 export function expired(rows: DisplayRow[], now: number, budget: number = MAX_DELETES): ExpiredIds {
   const cutoff = cutoffFor(rows, now);
-  return rows.filter(r => Date.parse(r.updatedAt) < cutoff).slice(0, Math.max(0, budget)).map(r => r.docId) as unknown as ExpiredIds;
+  const ids = rows.filter(r => Date.parse(r.updatedAt) < cutoff).slice(0, Math.max(0, budget)).map(r => r.docId);
+  return Object.assign(ids, { cleared: 'expired' as const }); // the only place an ExpiredIds is made
 }
 
 // One row per thread: its newest. Rows older than MAX_AGE_DAYS are left out. Newest first.
