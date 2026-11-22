@@ -17,11 +17,11 @@ function rowNode(r: DisplayRow, service: Service, onResult: (saved: boolean) => 
   const a = el('a', 'row') as HTMLAnchorElement;
   if (r.link) { a.href = r.link; a.target = '_blank'; a.rel = 'noopener'; }
   // Saved once per row. In the Claude app a press on a thread link opens the thread at once and no click ever reaches the page,
-  // so on a row with a link the press itself must save, for the mouse and its main button only. A touch press can be a scroll,
+  // so on a row with a link the press itself must save, for the mouse and its main button only (not with Ctrl, which opens a menu on a Mac, or Alt, which downloads). A touch press can be a scroll,
   // and the other buttons never send a click, so they save nothing. A finished click, from touch or the keyboard, also saves. Nothing here ever stops the link.
   let saved = false;
   const markOnce = () => { if (!saved) { saved = true; service.markSeen(r.docId, onResult); } };
-  if (r.link) a.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.button === 0) markOnce(); });
+  if (r.link) a.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.button === 0 && !e.ctrlKey && !e.altKey) markOnce(); });
   a.addEventListener('click', markOnce);
   if (!r.link) { // no href means no keyboard focus, so make the row a button
     a.tabIndex = 0;
@@ -47,8 +47,7 @@ export function startClient({ service }: Deps): void {
   };
   if (!service) { status.textContent = 'This view cannot reach the list. Open the page inside Claude, signed in.'; return; }
   const slow = setTimeout(() => { status.textContent = 'The list cannot be reached yet. Still trying.'; }, 10000);
-  service.watch((v: View) => {
-    clearTimeout(slow);
+  const draw = (v: View) => {
     box.replaceChildren(...v.groups.map(g => {
       const section = el('div', 'day');
       section.append(el('h2', '', g.label), ...g.rows.map(r => rowNode(r, service, onResult)));
@@ -56,5 +55,18 @@ export function startClient({ service }: Deps): void {
     }));
     const stored = `${v.stored.toLocaleString()} of ${v.limit.toLocaleString()} stored rows used.`;
     status.textContent = v.threads ? `${v.threads} threads. ${v.waiting} waiting on you. ${stored}` : `No thread has reported yet. ${stored}`;
+  };
+  // While a mouse button is down the list is not redrawn, or the press and the release would land on different rows and the click would be lost.
+  // A button that never comes back up (released outside the window) is given up on after 3 seconds, so the list cannot freeze.
+  let pending: View | null = null;
+  let pressTimer: ReturnType<typeof setTimeout> | undefined;
+  // The redraw waits one tick after the release, because the click is sent right after it and must still find its row.
+  const release = () => { clearTimeout(pressTimer); pressTimer = undefined; setTimeout(() => { if (pending && !pressTimer) { const v = pending; pending = null; draw(v); } }, 0); };
+  window.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') { clearTimeout(pressTimer); pressTimer = setTimeout(release, 3000); } }, true);
+  window.addEventListener('pointerup', release, true);
+  window.addEventListener('pointercancel', release, true);
+  service.watch((v: View) => {
+    clearTimeout(slow);
+    if (pressTimer) pending = v; else draw(v);
   }, code => { clearTimeout(slow); status.textContent = `The list stopped updating (${code}). Reload the page.`; });
 }

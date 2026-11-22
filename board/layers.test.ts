@@ -111,10 +111,11 @@ test('a seen save that keeps failing stops after four tries and reports once', a
 
 test('the Client marks a row only on a mouse press of a linked row, or a finished click or key', () => {
   const src = readFileSync(new URL('client.ts', import.meta.url), 'utf8');
-  assert.doesNotMatch(src, /pointerup|mousedown|mouseup|touchstart|touchend/);
-  assert.equal(src.match(/pointerdown/g)?.length, 1);
-  assert.match(src, /if \(r\.link\) a\.addEventListener\('pointerdown', e => \{ if \(e\.pointerType === 'mouse' && e\.button === 0\) markOnce\(\); \}\);/);
+  assert.doesNotMatch(src, /mousedown|mouseup|touchstart|touchend/);
   assert.equal(src.match(/service\.markSeen\(/g)?.length, 1);
+  assert.match(src, /if \(r\.link\) a\.addEventListener\('pointerdown', e => \{ if \(e\.pointerType === 'mouse' && e\.button === 0 && !e\.ctrlKey && !e\.altKey\) markOnce\(\); \}\);/);
+  // the other press listeners only hold back redraws; they never mark a row
+  assert.equal(src.match(/addEventListener\('pointer(down|up|cancel)'/g)?.length, 4);
 });
 
 test('the Client never stops a link from opening, and opens nothing itself', () => {
