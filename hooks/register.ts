@@ -5,4 +5,6 @@
 // Manager: reaches storage for the Service.
 // Connector: the only code that talks to the board.
 
-export function register(_on: unknown): void {}
+export function register(on: (event: string, hook: (...a: unknown[]) => unknown) => void): void {
+  on('turn.complete', async (_$: unknown, _e: unknown, next: unknown) => (next as () => unknown)());
+}
