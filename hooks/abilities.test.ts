@@ -23,7 +23,8 @@ test(
     assert.equal(run.error, undefined, 'the claude command did not run, and in CI this check may not be skipped');
     assert.equal(run.status, 0, run.stdout + run.stderr);
     const found: Record<string, string> = {};
-    for (const m of run.stdout.matchAll(/^\s*> \.\/register\.ts (hooks|calls|env reads|env writes): (.*)$/gm)) {
+    // The line marker is ">" on a plain Linux console (TERM=linux) and "❯" everywhere else, CI included.
+    for (const m of run.stdout.matchAll(/^\s*[>❯] \.\/register\.ts (hooks|calls|env reads|env writes): (.*)$/gmu)) {
       found[m[1]!] = m[2]!.trim();
     }
     assert.deepEqual(found, approved);
