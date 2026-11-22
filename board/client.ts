@@ -16,11 +16,15 @@ function el(tag: string, cls?: string, text?: string): HTMLElement {
 function rowNode(r: DisplayRow, service: Service): HTMLElement {
   const a = el('a', 'row') as HTMLAnchorElement;
   if (r.link) { a.href = r.link; a.target = '_blank'; a.rel = 'noopener'; }
-  a.addEventListener('click', () => service.markSeen(r.docId));
+  // Saved on press, not on click: inside the Claude app the click can leave the page before the save is sent.
+  let saved = false;
+  const markOnce = () => { if (!saved) { saved = true; service.markSeen(r.docId); } };
+  a.addEventListener('pointerdown', markOnce);
+  a.addEventListener('click', markOnce);
   if (!r.link) { // no href means no keyboard focus, so make the row a button
     a.tabIndex = 0;
     a.setAttribute('role', 'button');
-    a.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); service.markSeen(r.docId); } });
+    a.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); markOnce(); } });
   }
   const top = el('div', 'top');
   top.append(el('span', 'title', r.title), el('span', 'chip ' + r.tone, r.stateLabel));
