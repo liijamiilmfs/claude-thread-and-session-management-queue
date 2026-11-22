@@ -1,5 +1,5 @@
 {
   "extends": "../tsconfig.json",
-  "compilerOptions": { "noEmit": false, "allowImportingTsExtensions": false, "outDir": "../dist/board", "types": [] },
-  "files": ["board.ts"]
+  "compilerOptions": { "noEmit": false, "rewriteRelativeImportExtensions": true, "rootDir": ".", "outDir": "../dist/board", "types": [] },
+  "files": ["client.ts"]
 }
