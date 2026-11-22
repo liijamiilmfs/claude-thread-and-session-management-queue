@@ -1,0 +1,5 @@
+{
+  "name": "thread-queue",
+  "version": "0.0.1",
+  "description": "Saves a row on the Thread Queue board when a thread finishes a turn."
+}
