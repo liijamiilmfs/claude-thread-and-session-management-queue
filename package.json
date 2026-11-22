@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "node --test",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "build:board": "tsc -p board/tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
