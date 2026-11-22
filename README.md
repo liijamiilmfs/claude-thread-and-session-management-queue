@@ -3,7 +3,7 @@
 One list of your Claude project threads across every project, with freshly finished turns on top.
 
 > [!NOTE]
-> Status: planning. There is nothing to install yet. The design is recorded in `docs/adr/adr-0001-thread-queue-architecture.md` and waits on four short tests. A prototype of both parts worked in one thread on 2026-11-21.
+> Status: planning. There is nothing to install yet. The design is recorded in `docs/adr/adr-0001-thread-queue-architecture.md` and was accepted on 2026-11-22. A test build of the plugin wrote 37 rows from 10 threads in 3 projects by itself that morning.
 
 ## What it does
 
@@ -22,20 +22,21 @@ It covers cloud project threads only. The Claude desktop app already sorts local
 Two parts.
 
 1. **The board** is one private Artifact page that you pin in Claude. It keeps one row per finished turn and updates by itself.
-2. **The turnstile** is a small Claude Code plugin switched on in each project.
+2. **The plugin** is a small Claude Code plugin, uploaded once to your account. It reaches every project.
 
-Think of a turnstile at an exit. When a thread has told you something and tries to end its turn, a hook checks for that thread's row on the board. No row, no exit: the hook hands back the exact row to write, and the turn ends only after the thread writes it.
+Think of a clerk standing next to each thread's outbox. Each time the thread sends you something, the clerk writes one line in the board's log book. The clerk never touches the message and never stops it.
 
-The hook is code. It runs whether or not the agent remembers, which is the point. The agent only fills in the label: title, project, state and preview.
+The clerk is code inside Claude Code. It finds the thread's title and project itself and writes the row with its own call. The thread's agent writes nothing and is asked for nothing, so a forgetful agent cannot lose a row. No turn is ever blocked.
 
 Nothing is hosted, no network rule changes, and no secret is stored.
 
 ## Quick start
 
-Not available yet. Planned steps, to be confirmed by the Milestone 0 tests:
+Not available yet. Planned steps:
 
 1. Publish the board page and pin it.
-2. Switch the plugin on for each project and give it the board's address.
+2. Remove any older Thread Queue plugin from your account's Plugins page.
+3. Upload the `thread-queue` plugin zip on the same page. It reaches every project, and running threads pick it up when they next wake.
 
 ## Usage
 
@@ -43,13 +44,13 @@ Open the pinned board. Work the Priority section from the top.
 
 ## Configuration
 
-Planned: one setting, the board's address. With no address set, the turnstile does nothing.
+None. Plugin settings do not reach cloud threads, so the board's address is fixed in the plugin's code.
 
 ## Development
 
-The code will be TypeScript. Node runs the plugin's files directly, so the plugin has no build step.
+The code is TypeScript. Claude Code loads the plugin's `.ts` files directly, so the plugin has no build step. Tests and the type check run on Node 24.22.3: `npm ci`, then `npm test` and `npm run typecheck`.
 
-Agent and contributor rules are in `AGENTS.md`. Install and test commands arrive with the plugin skeleton. There are none today.
+Agent and contributor rules are in `AGENTS.md`.
 
 ## Project layout
 
@@ -57,14 +58,22 @@ Agent and contributor rules are in `AGENTS.md`. Install and test commands arrive
 |---|---|
 | `docs/adr/` | Decision records |
 | `docs/agent-routing-contract.md` | A synced copy of the Rule 0 Softworks routing contract. Do not edit it here. |
-| `hooks/`, `src/` | Planned: the turnstile plugin |
+| `.claude-plugin/`, `hooks/` | Planned: the plugin |
 | `board/` | Planned: the board page |
 
 ## Limits
 
-- A turn that dies from an error never reaches the turnstile, so it leaves no row.
-- After two refusals in a row the turnstile lets the thread go, so a broken board can never trap a thread. That turn's row is missed.
-- The label on a row is written by the agent. The hook checks that it is there, not that it is accurate.
+- The main chat of each project gets no rows. It has no way to write to the board.
+- Ways a thread reaches you without a tool call get no row: approval prompts, crashes, and messages sent outside the project app.
+- If the board stays down until a thread's machine is shut down, that thread's waiting rows are lost with it.
+- At most 20 rows wait at once. Past that, the oldest is dropped.
+- A thread you stop mid-turn sends its row only after your next message.
+- Another plugin that refuses the board write every time would stop rows from that thread.
+- A lost row is silent. It shows only in the thread's own debug log, not on the board.
+- Josh accepted some of these as known gaps. Four are marked to be fixed in the build (decision record, "What can still lose a row").
+- The plugin works because your account has no organization guard. A move to a Team or Enterprise plan would block its board writes until an admin allows them.
+- The project name comes from a title format Anthropic has not documented. If it changes, rows show no project.
+- The plugin picks a row's state from what the thread did. A question asked in a plain reply shows as review, not needs you.
 - A row leaves Priority when you click it on the board, not when you open the thread some other way.
 
 ## Support
