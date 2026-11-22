@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import type { StoredDoc } from './model.ts';
 import type { Manager } from './manager.ts';
 import { toDisplay } from './transformer.ts';
@@ -71,4 +71,9 @@ test('every file imports only the layers it may', () => {
 
 test('the Client never gets the Manager', () => {
   assert.doesNotMatch(readFileSync(new URL('client.ts', import.meta.url), 'utf8'), /manager|connector/i);
+});
+
+test('no shipped file is missing from the allow-list', () => {
+  const shipped = readdirSync(new URL('.', import.meta.url)).filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+  assert.deepEqual(shipped.sort(), Object.keys(ALLOWED).sort());
 });

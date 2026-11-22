@@ -13,7 +13,7 @@ function cutoffFor(rows: DisplayRow[], now: number): number {
   return Math.min(now, times.length ? Math.max(...times) : now) - MAX_AGE_DAYS * 86400000;
 }
 
-export const MAX_DELETES = 200; // per page load: the Client passes in what is left of it
+export const MAX_DELETES = 200; // per page load: the Service passes in what is left of it
 
 // Board rows to delete: older than MAX_AGE_DAYS by the rule above, at most `budget`. A row with no readable time is never deleted.
 export function expired(rows: DisplayRow[], now: number, budget: number = MAX_DELETES): ExpiredIds {

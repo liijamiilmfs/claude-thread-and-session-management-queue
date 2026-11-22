@@ -1,4 +1,4 @@
-// Manager: the Client's only way to the stored rows. It is handed a Connector by main.ts. Depends on Connector (type) and Model. (ADR-0001 section 5)
+// Manager: the Service's only way to the stored rows. It is handed a Connector by main.ts. Depends on Connector (type) and Model. (ADR-0001 section 5)
 import type { ExpiredIds, StoredDoc } from './model.ts';
 import type { Board } from './connector.ts';
 
