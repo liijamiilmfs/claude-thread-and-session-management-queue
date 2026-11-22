@@ -13,31 +13,20 @@ function el(tag: string, cls?: string, text?: string): HTMLElement {
   return n;
 }
 
-// A fresh link, because the row may have been replaced by a list update while the save was going out. Opens exactly once.
-function openLink(url: string): void {
-  const t = el('a') as HTMLAnchorElement;
-  t.href = url; t.target = '_blank'; t.rel = 'noopener';
-  document.body.append(t);
-  t.click();
-  t.remove();
-}
-
 function rowNode(r: DisplayRow, service: Service, onResult: (saved: boolean) => void): HTMLElement {
   const a = el('a', 'row') as HTMLAnchorElement;
   if (r.link) { a.href = r.link; a.target = '_blank'; a.rel = 'noopener'; }
-  // The mark is saved only on a finished activation (click, or Enter and Space on a row with no link), once per row.
-  let saving: Promise<void> | null = null;
-  const markOnce = (): Promise<void> => saving ??= service.markSeen(r.docId, onResult);
-  a.addEventListener('click', e => {
-    if (!r.link || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) { void markOnce(); return; }
-    // Wait briefly for the save, then open the thread. Inside the Claude app a click can leave the page before the save is sent.
-    e.preventDefault();
-    void markOnce().then(() => openLink(r.link));
-  });
+  // Saved once per row. In the Claude app a press on a thread link opens the thread at once and no click ever reaches the page,
+  // so on a row with a link the press itself must save, for the mouse and its main button only. A touch press can be a scroll,
+  // and the other buttons never send a click, so they save nothing. A finished click, from touch or the keyboard, also saves. Nothing here ever stops the link.
+  let saved = false;
+  const markOnce = () => { if (!saved) { saved = true; service.markSeen(r.docId, onResult); } };
+  if (r.link) a.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.button === 0) markOnce(); });
+  a.addEventListener('click', markOnce);
   if (!r.link) { // no href means no keyboard focus, so make the row a button
     a.tabIndex = 0;
     a.setAttribute('role', 'button');
-    a.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void markOnce(); } });
+    a.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); markOnce(); } });
   }
   const top = el('div', 'top');
   top.append(el('span', 'title', r.title), el('span', 'chip ' + r.tone, r.stateLabel));
