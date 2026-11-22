@@ -41,14 +41,15 @@ export function rowFor(tool: string, args: Args): Told | undefined {
   }
 }
 
-// The one call the plugin makes: this thread's row, written to the board. Undefined until the thread id and title are known.
+// The one call the plugin makes: this thread's row, written to the board. Undefined without a thread id.
+// A row is never held back for a title: when the lookup failed, the thread id stands in for it.
 // Only the preview comes from what the thread posted. Everything else is fixed here or found by code.
 export function rowCall(thread: string, at: number, told: Told, title: string, project: string) {
-  if (!/^session_[A-Za-z0-9]+$/.test(thread) || !title) return undefined;
+  if (!/^session_[A-Za-z0-9]+$/.test(thread)) return undefined;
   return {
     tool: 'ArtifactData', action: 'set', url: BOARD, collection: 'turns', doc_id: thread + '.' + at,
     data: {
-      thread, title: title.slice(0, LIMITS.title), ...(project && { project: project.slice(0, LIMITS.project) }),
+      thread, title: (title || thread).slice(0, LIMITS.title), ...(project && { project: project.slice(0, LIMITS.project) }),
       state: told.state, updated_at: new Date(at).toISOString(), preview: told.preview,
       url: 'https://claude.ai/code/' + thread, gate: 't8-plugin',
     },

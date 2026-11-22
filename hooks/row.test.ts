@@ -69,10 +69,13 @@ test('the row write: one fixed call, every field built by code', () => {
   assert.equal(BOARD, 'https://claude.ai/artifact/ByotUv4ViCSyFxtHF5cbNG');
 });
 
-test('the row write: nothing without a thread id or a title', () => {
+test('the row write: nothing without a thread id', () => {
   const told = { state: 'review', preview: 'p' };
   for (const thread of ['', 'unknown', 'cse_017RufJ', 'session_', 'session_x/../y']) assert.equal(rowCall(thread, at, told, 'T', 'P'), undefined, thread);
-  assert.equal(rowCall(me, at, told, '', 'P'), undefined);
+});
+
+test('the row write: with no title the thread id stands in, so the row is never held back', () => {
+  assert.equal(rowCall(me, at, { state: 'review', preview: 'p' }, '', 'P')!.data.title, me);
 });
 
 test('the row write: no project field when the name was not found, long names are cut', () => {

@@ -191,19 +191,33 @@ test('a broken note never stops a write', async () => {
   assert.equal(run.writes.length, 1);
 });
 
-test('no title yet: the row waits, then goes out with the title as it is at that time', async () => {
+test('title lookup down: the row still goes out, with the thread id as its title', async () => {
   let title: string | undefined;
-  const { tell, turnEnd, writes, logs } = await start({ title: () => title });
-  await tell(post, { text: 'Waiting for a title' });
+  const { tell, turnEnd, writes } = await start({ title: () => title });
+  await tell(post, { text: 'Lookup is down' });
   await turnEnd();
-  assert.equal(writes.length, 0);
-  assert.ok(logs.some((l) => l.includes('no title yet, 1 row(s) kept')));
   title = 'First title';
+  await tell(post, { text: 'Lookup is back' });
+  await turnEnd();
+  title = undefined;
+  await tell(post, { text: 'Down again' });
   await turnEnd();
   title = 'Renamed thread';
   await tell(post, { text: 'After the rename' });
   await turnEnd();
-  assert.deepEqual(writes.map((w) => w.data.title), ['First title', 'Renamed thread']);
+  // Down again: the last title seen is used.
+  assert.deepEqual(writes.map((w) => w.data.title), [me, 'First title', 'First title', 'Renamed thread']);
+  assert.equal(writes[0]!.data.project, undefined);
+});
+
+test('a damaged row in the note is dropped and does not hold up the others', async () => {
+  const note = new Map<string, unknown>([['waiting', [{ thread: 'not a thread', at: 1, told: { state: 'review', preview: 'bad' } }]]]);
+  const { tell, turnEnd, writes, logs } = await start({ note });
+  await tell(post, { text: 'Good row' });
+  await turnEnd();
+  assert.deepEqual(writes.map((w) => w.data.preview), ['Good row']);
+  assert.ok(logs.includes('thread-queue: dropped a waiting row with no thread id'));
+  assert.deepEqual(note.get('waiting'), []);
 });
 
 test('the project name is looked up once, the title every time', async () => {

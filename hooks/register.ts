@@ -62,7 +62,7 @@ async function drain($: Api): Promise<void> {
     while (waiting.length) {
       const { thread, at, told } = waiting[0]!;
       const call = rowCall(thread, at, told, title, project);
-      if (!call) { note($, 'no title yet, ' + waiting.length + ' row(s) kept'); break; }
+      if (!call) { note($, 'dropped a waiting row with no thread id'); waiting.shift(); wrote = true; continue; } // only a damaged note gets here
       const out = await $.tool.call(call).catch((err): Out => ({ isError: true, text: String(err) }));
       if (!landed(out)) { note($, 'row ' + call.doc_id + ' not written, kept: ' + String(out.deny ?? out.text).slice(0, 200)); break; }
       waiting.shift();
