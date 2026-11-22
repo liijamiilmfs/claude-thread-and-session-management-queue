@@ -67,7 +67,8 @@ export function sessionOf(result: unknown): { title?: string; parent?: string } 
   try {
     const blocks = isRecord(result) && !result.isError && Array.isArray(result.content) ? result.content : [];
     const text = blocks.find((b) => isRecord(b) && typeof b.text === 'string')?.text;
-    const ccr = JSON.parse(text).ccr;
+    // The record of another session (the parent) comes wrapped in a notice, so take the JSON from brace to brace.
+    const ccr = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)).ccr;
     return {
       ...(typeof ccr.title === 'string' && { title: ccr.title }),
       ...(typeof ccr.parent_session_id === 'string' && { parent: ccr.parent_session_id }),
