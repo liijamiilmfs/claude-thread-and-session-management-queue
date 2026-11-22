@@ -212,13 +212,21 @@ One limit shapes the split. Claude Code's checker lets the `$` object be passed 
 | File or section | Role | What lives there |
 |---|---|---|
 | `hooks/register.ts`, Composition Root | Composition Root | `register()`: names the events and the nine tools, wires the handlers |
-| `hooks/register.ts`, Controller | Controller | The `tool.call` and `turn.complete` handlers: pass the call on, then hand the result to the Service and the Manager |
-| `hooks/register.ts`, Manager | Manager | The waiting rows: add, keep, write oldest first, drop past 20 and count the drops (R14), one write at a time |
+| `hooks/register.ts`, Controller | Controller | The `tool.call` and `turn.complete` handlers: pass the call on, then hand the result to the Service. It calls only the Service |
+| `hooks/register.ts`, Service | Service | The conductor. For each waiting row it runs the steps in order: clean and hide secrets, the model's look, the bare row if anything failed, the last look, and only then the write. It holds no rule of its own. It passes `$` on and never calls anything on it |
+| `hooks/register.ts`, Manager | Manager | The waiting rows: add, keep, write oldest first, drop past 20 and count the drops (R14), one write at a time. It does what the Service tells it, hands every read and write to the Connector, and never calls the Service |
 | `hooks/register.ts`, Connector | Connector | The only code that calls `$.store`, `$.tool.call`, `$.mcp.call` and the one `$.model` call (R13) |
-| `hooks/row.ts` | Service | Which call owes a row, its state and preview, the row's shape, reading the lookup's answer. The safety check's pure parts: the last look, the row shape, cleaning, the secret rule, the bare row, and reading the model's answer (R8, R11 to R13). Pure: no imports, no file, network, clock or environment |
-| `hooks/row.ts`, types | Model | The shapes of a waiting row and a row |
+| `hooks/row.ts` | Support of the Service | Every rule, as pure functions the Service section calls: which call owes a row, its state and preview, the row's shape, reading the lookup's answer. The safety check's pure parts: the last look, the row shape, cleaning, the secret rule, the bare row, and reading the model's answer (R8, R11 to R13). Pure: no imports, no file, network, clock or environment |
+| `hooks/row.ts`, types | Model | The shapes of a waiting row, a row and a checked call |
 
-Not settled (OPEN-010): which section calls the safety check at the door. The design file puts that call in the Connector section. The policy's allow-list gives a Connector only Provider and Model, and gives a Manager no Service, so that placement does not fit as written. No file is added for the safety code.
+Who calls the safety check (settles OPEN-010, the planning thread's answer, 2026-11-22):
+
+- The design file has the Connector section call the last look. The policy does not allow that: its closed list gives a Connector only Provider and Model, and gives a Manager no Service.
+- The one allowed road from a handler to the board is Controller, then Service, then Manager, then Connector. So the Service calls the safety check, and the Controller calls only the Service.
+- The conducting code sits in `hooks/register.ts`, not in `hooks/row.ts`, because `$` can only be passed along inside the module's own file. The rules stay pure functions in `hooks/row.ts`. They are owned support of the one Service (policy 3.1, and 6.2 rule 5), so no other section calls them.
+- **The door is kept by the types.** The last look returns a checked call, a type of its own. The Manager's and the Connector's write functions accept only that type. Code that skips the last look does not pass the type check.
+- The source test (Section 3) also checks that the Service section never calls anything on `$`.
+- No file is added for the safety code.
 
 The board is a page, `board/index.html`, that holds markup and styles only, and one script, `board/board.ts`, classified by section:
 
@@ -232,11 +240,12 @@ The board is a page, `board/index.html`, that holds markup and styles only, and 
 
 Roles this scope does not use: Domain, Gateway, Provider (first-party), Contract and Entity. The plugin has no Transformer and no Client. The board has no Controller and no Manager. With no Domain types, each Service holds its rules, as policy Section 5.3 allows.
 
-Dependencies used. Not all are inside the policy's allow-list: Controller to Manager is not on it (OPEN-010).
+Dependencies used, all inside the policy's allow-list. An earlier text of this table listed Controller to Manager, which is not on the list. That edge is gone.
 
 | From | To |
 |---|---|
-| Controller | Service, Manager, Model |
+| Controller | Service, Model |
+| Service | Manager, Model |
 | Manager | Connector, Model |
 | Connector | Model |
 | Client | Service, Connector, Transformer, Model |
@@ -326,9 +335,11 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 - **OPEN-005**: The main chat. Josh wants it on the list only by a checked, agent-free way (T4 q7). None is known.
 - **OPEN-006**: T2 stays open until rows from all four models are seen on this design.
 - **OPEN-007**: Settled 2026-11-22 (CTX-038). Left to do: the four fixes (items 2, 4, 8, 10) and a Linear issue for each accepted gap.
-- **OPEN-008**: Nobody has seen a plugin's model call work in a cloud thread. Step one of the `RUL-3168` build is a test build that makes the call on one harmless line and one made-up key and logs each answer and its time. It needs one upload by Josh. This record allows the model call only after that test passes. If it fails, the plugin makes no model call, this record is changed back before any code (R13), the build stays on the code rules alone (R11, R12, R14), and Josh is told before anything ships.
+- **OPEN-008**: Nobody has seen a plugin's model call work in a cloud thread. Step one of the `RUL-3168` build is a test build that makes the call on one harmless line and one made-up key and logs each answer and its time. It needs one upload by Josh. This record allows the model call only after that test passes. If it fails, the plugin makes no model call, this record is changed back before any code (R13), the builder stops and tells Josh first, and the build stays on the code rules alone (R11, R12, R14).
 - **OPEN-009**: How well a small model spots a secret in one line. No trial was run. The secret list has not been tried on real secrets either.
-- **OPEN-010**: Where the safety check is called from (Section 5). The `RUL-3168` brief must name a caller the policy's allow-list permits, and Section 5 and its dependency table change before code if they need to. No `RUL-3168` code starts while this is open. Found on the same read: that table lists Controller to Manager, which the allow-list does not have.
+- **OPEN-010**: Settled 2026-11-22 (Section 5): the Service calls the safety check, the Controller calls only the Service, and the write accepts only a checked call. Two proposals came with that answer and wait on Josh (OPEN-015, OPEN-016).
+- **OPEN-015** (PROPOSED, pending Josh): a Gateway for the model's look. By the policy a Manager is for the application's own stored data (5.6), and an outside capability such as a model's answer belongs to a Gateway (5.5). This record says the scope uses no Gateway. So either the record adds a Gateway section to `hooks/register.ts`, or it records an exception. The same question applies to the `get_session` lookup, which reads data an outside system owns. Until Josh answers, no code for the model's look is written.
+- **OPEN-016** (PROPOSED, pending Josh): a second compare inside the Connector. Right before `$.tool.call` the Connector compares the four fixed things (tool, action, address, list name) with the constants once more, as its own support (policy 3.1). If it ever fails, nothing is written by that call, the failure goes back to the Service, and the Service sends a bare row through the same door. This is not in the design Josh approved. It adds a check and removes none.
 - **OPEN-011**: Section 3 still lists `$.tool.list`. The safety design does not need it. Dropping it from the lasting list is Josh's call.
 - **OPEN-012**: Whether a thread's machine is ever reused for another thread. Assumed not. If it is, R11 would turn the other thread's waiting rows into bare rows for this thread.
 - **OPEN-013**: Add only (R8) and a retry. If a write lands but reports a failure, the retry is refused because the row exists. As written, that row would wait forever at the front of the line and could push other rows past the waiting limit. Proposed rule, found in review of `RUL-3192`: a refusal because the row already exists counts as written, since row ids never repeat. It is a change to a row rule, so it needs Josh's yes before `RUL-3168` code.

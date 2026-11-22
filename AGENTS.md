@@ -58,8 +58,8 @@ Planned plugin files (ADR-0001, Section 5):
 |---|---|
 | `.claude-plugin/plugin.json` | Manifest (not governed) |
 | `hooks/hooks.json` | Points Claude Code at the module (not governed) |
-| `hooks/register.ts` | Sections: Composition Root, Controller, Manager, Connector |
-| `hooks/row.ts` | Service and Model |
+| `hooks/register.ts` | Sections: Composition Root, Controller, Service, Manager, Connector |
+| `hooks/row.ts` | The Service's rules (its owned support) and Model |
 
 Claude Code lets the `$` object be passed only to top-level functions of the module's own file, so every `$` call lives in `hooks/register.ts`. Its sections are marked by comments naming the role.
 
@@ -68,6 +68,9 @@ The board is a page, `board/index.html` (markup and styles only), and one script
 Rules a reviewer checks:
 
 - `hooks/row.ts` holds every row rule. It imports nothing, does no file or network access, and reads no clock and no environment. Time and the thread id are passed in.
+- The Controller section calls only the Service section. The Service section runs the safety check and decides the order of steps. The Manager and the Connector never call it.
+- The last look returns a checked call. The Manager's and the Connector's write functions accept only that type.
+- The Service section passes `$` on and never calls anything on it.
 - Only the Connector section of `hooks/register.ts` calls `$.store`, `$.tool.call`, `$.mcp.call` and the one `$.model` call.
 - `$.tool.call(` appears once in `hooks/register.ts`. `$.model.` appears once. `$.model.fork` never appears.
 - Only `hooks/register.ts` calls `$.env.get` and `$.clock`.
