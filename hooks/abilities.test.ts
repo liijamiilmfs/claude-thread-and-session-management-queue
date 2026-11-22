@@ -13,11 +13,14 @@ const approved: Record<string, string> = {
 
 const run = spawnSync('claude', ['plugin', 'validate', '.'], { encoding: 'utf8' });
 const missing = run.error !== undefined;
+// CI installs the claude command (RUL-3207). There a missing command fails. It never skips.
+const inCI = Boolean(process.env.CI);
 
 test(
-  missing ? 'plugin abilities (SKIPPED: the claude command is not on this machine)' : 'plugin abilities match the approved lists',
-  { skip: missing },
+  missing && !inCI ? 'plugin abilities (SKIPPED: the claude command is not on this machine)' : 'plugin abilities match the approved lists',
+  { skip: missing && !inCI },
   () => {
+    assert.equal(run.error, undefined, 'the claude command did not run, and in CI this check may not be skipped');
     assert.equal(run.status, 0, run.stdout + run.stderr);
     const found: Record<string, string> = {};
     for (const m of run.stdout.matchAll(/^\s*> \.\/register\.ts (hooks|calls|env reads|env writes): (.*)$/gm)) {
