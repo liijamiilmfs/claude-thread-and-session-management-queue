@@ -66,6 +66,11 @@ Agent and contributor rules are in `AGENTS.md`.
 - The main chat of each project gets no rows. It has no way to write to the board.
 - Ways a thread reaches you without a tool call get no row: approval prompts, crashes, and messages sent outside the project app.
 - If the board stays down until a thread's machine is shut down, that thread's waiting rows are lost with it.
+- At most 20 rows wait at once. Past that, the oldest is dropped.
+- A thread you stop mid-turn sends its row only after your next message.
+- Another plugin that refuses the board write every time would stop rows from that thread.
+- A lost row is silent. It shows only in the thread's own debug log, not on the board.
+- Only some of these losses have been accepted by Josh. The rest are open in the decision record (OPEN-007).
 - The plugin works because your account has no organization guard. A move to a Team or Enterprise plan would block its board writes until an admin allows them.
 - The project name comes from a title format Anthropic has not documented. If it changes, rows show no project.
 - Who picks a row's state (needs you, review, finished) is still an open question for Josh.

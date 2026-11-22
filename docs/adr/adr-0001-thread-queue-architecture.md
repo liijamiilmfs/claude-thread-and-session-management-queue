@@ -34,7 +34,7 @@ Josh runs three to five Claude projects at once. Each project's threads run in t
 - **CTX-030**: A plugin can carry a hooks module (`hooks/hooks.json`, key `"modules"`), which may be a `.ts` file. A cloud session runs a module's hooks "for a plugin that reaches the cloud session" (mods overview, "Where mods run"). The module "has no Node.js APIs" and no file or network access of its own. It reaches those only through the `$` object Claude Code hands it (mods API).
 - **CTX-031**: A module can call a tool itself with `$.tool.call`. Anthropic's type file (`mods/types/claude-code.d.ts`): it is "the same call the engine makes for the model's tool calls", and "The check opens no dialog and asks no classifier: every ask becomes an allow, whoever raised it". Mods admin page: such calls "can skip permission rules, permission prompts, a hook's `ask`, and the auto mode classifier."
 - **CTX-032**: The one documented blocker for CTX-031: "Where sec-default is seated, a person's mod is answered `{ deny }` until that call is allowed." That organization guard loads with managed settings or a Team or Enterprise login.
-- **CTX-033**: Module events used: `tool.call` (a tool is about to run), `turn.complete` (a turn ended) and `tool.judge` (auto mode is about to ask its safety check, Claude Code 2.1.326 or later). A hook has 10 seconds of its own time, "not counting time inside `next` or a mods API call". A hook that fails after `next` resolved: "that result stands, and nothing runs a second time".
+- **CTX-033**: Module events used: `tool.call` (a tool is about to run), `turn.complete` (a turn ended) and, in the test build only, `tool.judge` (auto mode is about to ask its safety check). The docs give a version floor, 2.1.326, only for `tool.judge`. No floor is recorded here for `tool.call` or `turn.complete`. They were seen working on Claude Code 2.1.330 (T8). A hook has 10 seconds of its own time, "not counting time inside `next` or a mods API call". A hook that fails after `next` resolved: "that result stands, and nothing runs a second time".
 - **CTX-034**: After Josh stops a thread, Claude Code refuses a module's calls until his next message ("the session was stopped and nobody has sent input since").
 
 ### Facts seen in Milestone 0 (test results, not documented promises)
@@ -94,7 +94,7 @@ These are the product.
 - **R5**: The module never blocks, changes or refuses a thread's call.
 - **R6**: The row is saved in the note before the board is tried. A failed write is kept and tried again, oldest first. At most 20 rows wait. The oldest is dropped past that, and the drop is logged.
 - **R7**: Turn end waits at most 8 seconds for the board. A broken board must never trap a thread.
-- **R8**: The only tool the module calls is `ArtifactData`, action `set`, with the board address and collection fixed in code. The only lookup is `get_session` on `claude-code-remote`, read-only: once for the thread, once for its parent.
+- **R8**: The only tool the module calls is `ArtifactData`, action `set`, with the board address and collection fixed in code. The only lookup is `get_session` on `claude-code-remote`, read-only. The thread's own record is read before every write pass, so a renamed title shows on the next row. The parent's record is read until a project name is found, then not again in that run.
 - **R9**: Outside a cloud thread (no thread id) the module does nothing.
 - **R10, state**: OPEN, see OPEN-002. The T8 build picks the state from the tool called:
 
@@ -112,10 +112,11 @@ The four states and their meanings, in order (T4 section 2, Josh's q5): `needs_y
 
 ### 3. Language and runtime
 
-- TypeScript (CTX-016). Claude Code's own loader runs the module's `.ts` files inside Claude Code (CTX-024, the log says `worker`). The plugin does not start Node on the thread's machine, so it does not depend on the machine's Node version.
+- TypeScript (CTX-016). The module's `.ts` files run inside Claude Code, on Claude Code's own runtime (CTX-024, seen working on 2.1.330). The plugin starts no process of its own. Which runtime that is (bundled, or the machine's Node) is Claude Code's choice, covered by NEG-004.
 - Use only TypeScript syntax that can be removed: no enums, no namespaces and no parameter properties. Imports name the `.ts` file.
 - `tsc`, set to emit nothing, is the type check (`npm run typecheck`). Tests run on Node 24.22.3's built-in test runner (`npm test`). `typescript` and `@types/node` are development dependencies only.
-- `claude plugin validate .` prints Claude Code's own list of what the module can do (`hooks:`, `calls:`, `env reads:`, `env writes:`). The T8 list: hooks `tool.call` on the nine R1 tools, `turn.complete`, `tool.judge` on `ArtifactData`; calls `$.clock.after`, `$.clock.now`, `$.env.get`, `$.mcp.call`, `$.store.get`, `$.store.set`, `$.tool.call`, `$.tool.list`, `$.ui.log`; env reads `CLAUDE_CODE_REMOTE_SESSION_ID`; env writes nothing. Proposal: a reviewer checks that list on every change, and `RUL-3166` makes it the lint step.
+- `claude plugin validate .` prints Claude Code's own list of what the module can do (`hooks:`, `calls:`, `env reads:`, `env writes:`). The lasting list: hooks `tool.call` on the nine R1 tools and `turn.complete`; calls `$.clock.after`, `$.clock.now`, `$.env.get`, `$.mcp.call`, `$.store.get`, `$.store.set`, `$.tool.call`, `$.tool.list`, `$.ui.log`; env reads `CLAUDE_CODE_REMOTE_SESSION_ID`; env writes nothing. The T8 build also listens on `tool.judge` for `ArtifactData`. That listener is test evidence only (the T8 reviewer found it proves little) and is dropped from the lasting build.
+- Proposal for `RUL-3166`: keep the expected list in the repository, and make a lint step that compares the printed `hooks:`, `calls:`, `env reads:` and `env writes:` lines with it and fails on any difference. `validate` alone is not enough: it passed with warnings in T8 and would still pass with a new call added. Whether CI can run the `claude` command is not proven.
 - A browser cannot run TypeScript, so the board's script is compiled with `tsc` when the board is published. The compiled file is published beside the page and is not committed.
 
 Rationale: the module is code and runs whether or not the model remembers (CTX-014). Its own call skips the safety check that refused one model-written row in five (CTX-021, CTX-024), which is what CTX-035 needs. It finds the title and project itself (CTX-025), which removes the only reason the model had a part. Nothing is hosted, no network rule changes, and no secret is stored.
@@ -183,7 +184,7 @@ The time and the thread id are read in `hooks/register.ts` and passed into `hook
 
 | Facility | Mapping | Who may call it |
 |---|---|---|
-| Module events (`tool.call`, `turn.complete`, `tool.judge`) and `next` | Framework inbound handling | Composition Root and Controller sections |
+| Module events (`tool.call`, `turn.complete`) and `next` | Framework inbound handling | Composition Root and Controller sections |
 | `$.env.get`, `$.clock` | External Provider abstraction | `hooks/register.ts` only. Values are passed in. |
 | `$.store` (the plugin's note) | External Connector facility | Connector section only |
 | `$.tool.call` (`ArtifactData` set on the board) | External Connector facility | Connector section only |
@@ -199,12 +200,12 @@ Not allowed in the module: `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt
 ### Positive
 
 - **POS-001**: Reporting is done by code. The model plays no part, so a model that skips an instruction cannot lose a row.
-- **POS-002**: The board write skips the safety check that refused one model-written row in five (CTX-021, CTX-024).
+- **POS-002**: The board write skips the safety check that refused one model-written row in five (CTX-021, CTX-024). Seen in one thread's log only (OPEN-004).
 - **POS-003**: One list across every project, from one upload on the account Plugins page.
 - **POS-004**: Nothing is hosted, no network rule changes, and no secret is stored.
 - **POS-005**: No turn is ever blocked. A broken board costs a thread at most 8 seconds at turn end.
 - **POS-006**: The row rules are pure functions in one file, so every rule has a plain test.
-- **POS-007**: No extra tool call by the model, and no dependence on the Node version of the thread's machine.
+- **POS-007**: No extra tool call by the model, and the plugin starts no process of its own on the thread's machine.
 
 ### Negative
 
@@ -219,15 +220,19 @@ Not allowed in the module: `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt
 
 ### What can still lose a row
 
-From T8, "What can still lose a row", and the T8 reviewer:
+From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/register.ts` at commit `cda4acc`. Josh has accepted only item 7 (T4, q8). Items 1 to 6 and 8 to 11 are not accepted (OPEN-007). Every loss is silent to Josh: it shows only in the thread's debug log, `/tmp/claude-code.log`.
 
 1. The board stays down until the thread's machine is reclaimed. The waiting rows are on that machine and go with it. The plugin makes no network call of its own, so it has nowhere else to put them.
 2. More than 20 rows wait at once. The oldest is dropped and the drop is logged.
 3. Josh stops a thread mid-turn. Claude Code refuses the module's calls until his next message (CTX-034). The row waits and goes out on the next turn, unless the machine is reclaimed first.
-4. A board call that never answers. Turn end stops waiting after 8 seconds. Later writes queue behind the stuck call until Claude Code restarts, then go out from the note.
+4. A board call that never answers. Turn end stops waiting after 8 seconds. Later writes queue behind the stuck call until Claude Code restarts, then go out from the note. If the machine is reclaimed before that restart, this becomes item 1.
 5. Another plugin refuses the module's call on every retry.
 6. The account moves to a Team or Enterprise plan (NEG-002).
 7. Ways a thread reaches Josh that no tool call shows: approval prompts, crashes, threads run on his computer, messages sent outside the project app (T4, Josh's q8 accepted these blind spots).
+8. Saving the note fails (logged as `note not saved`), and Claude Code then restarts. The rows held only in memory are lost.
+9. Building or storing the row throws (logged as `row not queued`). That row is never stored.
+10. Reading the note fails when Claude Code starts. The error is swallowed, and the next save overwrites the note, losing rows an earlier run left. Damaged rows in the note are also dropped silently when it is read.
+11. A turn on a machine the plugin has not reached yet, after an upload or an update (T1: about a minute).
 
 ### Open, not proven
 
@@ -237,6 +242,7 @@ From T8, "What can still lose a row", and the T8 reviewer:
 - **OPEN-004**: The log line `Skipping auto mode classifier for ArtifactData: called by plugin thread-queue` was read only in the T8 thread's own log. For the other four threads with rows, the proof is the rows landing and, for Josh's test thread, no `ArtifactData` call by the model in its transcript.
 - **OPEN-005**: The main chat. Josh wants it on the list only by a checked, agent-free way (T4 q7). None is known.
 - **OPEN-006**: T2 stays open until rows from all four models are seen on this design.
+- **OPEN-007**: Josh's rule is that no row may go missing (CTX-035). He has accepted only loss item 7. He accepts or rejects each of items 1 to 6 and 8 to 11, or asks for a design change.
 
 ## Alternatives Considered
 
@@ -292,7 +298,7 @@ From T8, "What can still lose a row", and the T8 reviewer:
 
 ## Implementation Notes
 
-- **IMP-001**: Milestone 0 is done except OPEN-001 to OPEN-006. The T8 test build is on branch `claude/project-thread-5rsmom` and is never merged. The build-out (Milestones 1 and 2) is not approved.
+- **IMP-001**: Milestone 0 is done except OPEN-001 to OPEN-007. The T8 test build is on branch `claude/project-thread-5rsmom` and is never merged. The build-out (Milestones 1 and 2) is not approved.
 - **IMP-002**: Rows on the board are written from thread text and are untrusted. The board shows titles and previews as plain text (a preview can hold markup, seen in T8) and follows a link only if it points at `https://claude.ai/`.
 - **IMP-003**: A row holds the thread id, title, project name, state, time, a one-line preview and a link. No prompts, full replies or tool input are stored. The T8 build also writes `gate: "t8-plugin"` as a test marker.
 - **IMP-004**: Install: remove any older Thread Queue plugin (`thread-queue-turnstile`), then upload the `thread-queue` zip on the account Plugins page. Two Thread Queue plugins at once spoil the proof and bring the gate back.
