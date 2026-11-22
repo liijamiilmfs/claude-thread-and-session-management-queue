@@ -13,12 +13,12 @@ function el(tag: string, cls?: string, text?: string): HTMLElement {
   return n;
 }
 
-function rowNode(r: DisplayRow, service: Service): HTMLElement {
+function rowNode(r: DisplayRow, service: Service, onFailed: () => void): HTMLElement {
   const a = el('a', 'row') as HTMLAnchorElement;
   if (r.link) { a.href = r.link; a.target = '_blank'; a.rel = 'noopener'; }
   // Saved on press, not on click: inside the Claude app the click can leave the page before the save is sent.
   let saved = false;
-  const markOnce = () => { if (!saved) { saved = true; service.markSeen(r.docId); } };
+  const markOnce = () => { if (!saved) { saved = true; service.markSeen(r.docId, onFailed); } };
   a.addEventListener('pointerdown', markOnce);
   a.addEventListener('click', markOnce);
   if (!r.link) { // no href means no keyboard focus, so make the row a button
@@ -37,13 +37,17 @@ function rowNode(r: DisplayRow, service: Service): HTMLElement {
 export function startClient({ service }: Deps): void {
   const status = document.getElementById('status')!;
   const box = document.getElementById('list')!;
+  const notice = el('p', 'muted');
+  notice.setAttribute('role', 'alert');
+  status.after(notice);
+  const onFailed = () => { notice.textContent = 'Could not save that you opened a thread. It may show as unread again. Reload the page and try again.'; };
   if (!service) { status.textContent = 'This view cannot reach the list. Open the page inside Claude, signed in.'; return; }
   const slow = setTimeout(() => { status.textContent = 'The list cannot be reached yet. Still trying.'; }, 10000);
   service.watch((v: View) => {
     clearTimeout(slow);
     box.replaceChildren(...v.groups.map(g => {
       const section = el('div', 'day');
-      section.append(el('h2', '', g.label), ...g.rows.map(r => rowNode(r, service)));
+      section.append(el('h2', '', g.label), ...g.rows.map(r => rowNode(r, service, onFailed)));
       return section;
     }));
     const stored = `${v.stored.toLocaleString()} of ${v.limit.toLocaleString()} stored rows used.`;

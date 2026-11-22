@@ -37,7 +37,7 @@ test('rows come from turns, and only turns rows are touched', async () => {
   const m = (await openManager())!;
   let seen: unknown;
   m.watchRows(docs => { seen = docs; }, () => {});
-  m.markRowSeen('a');
+  await m.markRowSeen('a');
   await m.removeRows(['a', 'a', 'b'] as unknown as ExpiredIds);
   assert.deepEqual(seen, [{ id: 'a', row: { title: 'x' } }]);
   assert.deepEqual(calls, ['watch turns', 'update turns/a', 'delete turns/a', 'delete turns/b']); // second 'a' skipped

@@ -63,13 +63,15 @@ export function groups(rows: DisplayRow[], now: number): Group[] {
 
 export type Service = {
   watch(onView: (view: View) => void, onError: (code: string) => void): void;
-  markSeen(docId: string): void;
+  markSeen(docId: string, onFailed: () => void): void; // saves in the background, retries, then calls onFailed
 };
 
-type Deps = { manager: Manager; toDisplay: (docId: string, row: StoredRow) => DisplayRow; now: () => number };
+export const SEEN_RETRY_DELAYS = [1000, 2000, 5000]; // ms between tries, so at most four tries
+
+type Deps = { manager: Manager; toDisplay: (docId: string, row: StoredRow) => DisplayRow; now: () => number; wait: (ms: number) => Promise<void> };
 
 // Takes the stored rows, clears and deletes the old ones through the Manager, and hands the Client what to show.
-export function createService({ manager, toDisplay, now }: Deps): Service {
+export function createService({ manager, toDisplay, now, wait }: Deps): Service {
   let deleteBudget = MAX_DELETES; // across every update of this page load
   return {
     watch(onView, onError) {
@@ -84,6 +86,15 @@ export function createService({ manager, toDisplay, now }: Deps): Service {
         onView({ groups: shown, threads: rows.length, waiting: rows.filter(isPriority).length, stored: all.length, limit: ROW_LIMIT });
       }, onError);
     },
-    markSeen: docId => manager.markRowSeen(docId),
+    markSeen(docId, onFailed) {
+      void (async () => {
+        for (let i = 0; ; i++) {
+          try { await manager.markRowSeen(docId); return; } catch {
+            if (i >= SEEN_RETRY_DELAYS.length) { onFailed(); return; }
+            await wait(SEEN_RETRY_DELAYS[i]);
+          }
+        }
+      })();
+    },
   };
 }
