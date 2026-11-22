@@ -33,3 +33,6 @@ export type DisplayRow = {
 };
 
 export type Group = { label: string; rows: DisplayRow[] };
+
+// Row ids the Service has checked and cleared for deletion. Only `expired()` makes one, and the delete functions accept nothing else.
+export type ExpiredIds = readonly string[] & { readonly cleared: 'expired' };

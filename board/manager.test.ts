@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openManager } from './manager.ts';
+import type { ExpiredIds } from './model.ts';
 
 // A stand-in for the page database, recording every call.
 function fakeDb(rows: Record<string, object>) {
@@ -29,8 +30,17 @@ test('rows come from turns, and only turns rows are touched', async () => {
   let seen: unknown;
   m.watchRows(docs => { seen = docs; }, () => {});
   m.markRowSeen('a');
-  await m.removeRows(['a', 'a', 'b']);
+  await m.removeRows(['a', 'a', 'b'] as unknown as ExpiredIds);
   assert.deepEqual(seen, [{ id: 'a', row: { title: 'x' } }]);
   assert.deepEqual(calls, ['watch turns', 'update turns/a', 'delete turns/a', 'delete turns/b']); // second 'a' skipped
+  delete (globalThis as any).claude;
+});
+
+// Checked by `npm run typecheck`: a plain id list is refused. Only expired() can make the checked type.
+test('a plain id list does not fit the delete', async () => {
+  fakeDb({});
+  const m = (await openManager())!;
+  // @ts-expect-error a plain string[] is not ExpiredIds
+  void m.removeRows(['a']);
   delete (globalThis as any).claude;
 });

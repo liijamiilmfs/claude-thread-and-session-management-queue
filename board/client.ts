@@ -1,7 +1,7 @@
 // Client: the only file that touches the document. Depends on Service, Manager, Transformer and Model. (ADR-0001 section 5)
 import type { DisplayRow } from './model.ts';
 import { toDisplay } from './transformer.ts';
-import { expired, groups, ROW_LIMIT } from './service.ts';
+import { expired, groups, MAX_DELETES, ROW_LIMIT } from './service.ts';
 import { openManager, type Manager } from './manager.ts';
 
 function el(tag: string, cls?: string, text?: string): HTMLElement {
@@ -24,6 +24,7 @@ function rowNode(r: DisplayRow, manager: Manager): HTMLElement {
 }
 
 async function start(): Promise<void> {
+  let deleteBudget = MAX_DELETES; // across every update of this page load
   const status = document.getElementById('status')!;
   const box = document.getElementById('list')!;
   const manager = await openManager();
@@ -34,7 +35,9 @@ async function start(): Promise<void> {
     const all = docs.map(d => toDisplay(d.id, d.row));
     const now = Date.now();
     const shown = groups(all, now);
-    void manager.removeRows(expired(all, now));
+    const gone = expired(all, now, deleteBudget);
+    deleteBudget -= gone.length;
+    void manager.removeRows(gone);
     box.replaceChildren(...shown.map(g => {
       const section = el('div', 'day');
       section.append(el('h2', '', g.label), ...g.rows.map(r => rowNode(r, manager)));

@@ -1,27 +1,28 @@
 // Service: what the list shows. Holds every board rule, reads no clock (time is passed in). Depends on Model only.
-import type { DisplayRow, Group } from './model.ts';
+import type { DisplayRow, ExpiredIds, Group } from './model.ts';
 
 export const MAX_AGE_DAYS = 60;
 export const ROW_LIMIT = 25000; // the page database's own limit
 
 export const isPriority = (r: DisplayRow): boolean => r.state !== 'working' && r.unread;
 
-const cutoffFor = (now: number): number => now - MAX_AGE_DAYS * 86400000;
-
-export const MAX_DELETES = 200; // one pass, so a fault cannot empty the board
-
-// Board rows to delete: older than MAX_AGE_DAYS. A row with no readable time is never deleted.
-// If even the newest row is that old, the device clock is wrong or the board is idle: delete nothing.
-export function expired(rows: DisplayRow[], now: number): string[] {
-  const cutoff = cutoffFor(now);
+// Age is measured from the earlier of the device clock and the newest row's time, so a clock that runs ahead cannot age rows.
+function cutoffFor(rows: DisplayRow[], now: number): number {
   const times = rows.map(r => Date.parse(r.updatedAt)).filter(t => !isNaN(t));
-  if (!times.length || Math.max(...times) < cutoff) return [];
-  return rows.filter(r => Date.parse(r.updatedAt) < cutoff).slice(0, MAX_DELETES).map(r => r.docId);
+  return Math.min(now, times.length ? Math.max(...times) : now) - MAX_AGE_DAYS * 86400000;
+}
+
+export const MAX_DELETES = 200; // per page load: the Client passes in what is left of it
+
+// Board rows to delete: older than MAX_AGE_DAYS by the rule above, at most `budget`. A row with no readable time is never deleted.
+export function expired(rows: DisplayRow[], now: number, budget: number = MAX_DELETES): ExpiredIds {
+  const cutoff = cutoffFor(rows, now);
+  return rows.filter(r => Date.parse(r.updatedAt) < cutoff).slice(0, Math.max(0, budget)).map(r => r.docId) as unknown as ExpiredIds;
 }
 
 // One row per thread: its newest. Rows older than MAX_AGE_DAYS are left out. Newest first.
 export function newest(rows: DisplayRow[], now: number): DisplayRow[] {
-  const cutoff = cutoffFor(now);
+  const cutoff = cutoffFor(rows, now);
   const byThread = new Map<string, DisplayRow>();
   for (const r of rows) {
     const prev = byThread.get(r.thread);

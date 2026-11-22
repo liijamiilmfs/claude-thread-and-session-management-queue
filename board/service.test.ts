@@ -19,10 +19,16 @@ test('rows older than 60 days are left out and marked for deletion', () => {
   const rows = [
     toDisplay('a', { thread: 't', ...at('2026-09-01T00:00:00Z') }),
     toDisplay('b', { thread: 'u', ...at('2026-10-01T00:00:00Z') }),
+    toDisplay('f', { thread: 'f', ...at('2026-11-22T00:00:00Z') }),
     toDisplay('c', { thread: 'v', state: 'finished' }), // no time: never deleted
   ];
-  assert.deepEqual(newest(rows, NOW).map(r => r.thread), ['u']);
-  assert.deepEqual(expired(rows, NOW), ['a']);
+  assert.deepEqual(newest(rows, NOW).map(r => r.thread), ['f', 'u']);
+  assert.deepEqual([...expired(rows, NOW)], ['a']);
+});
+
+test('a board idle for over 60 days deletes nothing (age counts from its newest row)', () => {
+  const rows = [toDisplay('a', { thread: 't', ...at('2026-09-01T00:00:00Z') }), toDisplay('b', { thread: 'u', ...at('2026-10-01T00:00:00Z') })];
+  assert.equal(expired(rows, NOW).length, 0);
 });
 
 test('unread rows go to Priority, a click (seen_at) takes them out', () => {
@@ -52,8 +58,23 @@ test('a clock far in the future deletes nothing', () => {
   assert.deepEqual(expired(rows, Date.parse('2030-01-01T00:00:00Z')), []);
 });
 
-test('one pass deletes at most MAX_DELETES rows', () => {
+test('a clock 30 days ahead cannot age rows: 450 rows of 40 days, 1 fresh row', () => {
+  const rows = [toDisplay('new', { thread: 'n', ...at('2026-11-22T00:00:00Z') })];
+  for (let i = 0; i < 450; i++) rows.push(toDisplay('o' + i, { thread: 'o' + i, ...at('2026-10-13T00:00:00Z') }));
+  const ahead = NOW + 30 * 86400000;
+  assert.equal(expired(rows, ahead).length, 0);
+  assert.equal(newest(rows, ahead).length, 451); // and they stay on screen
+});
+
+test('a wrong row time alone cannot delete: rows are measured from the earlier of the two', () => {
+  const rows = [toDisplay('a', { thread: 'a', ...at('2026-11-20T00:00:00Z') })];
+  assert.equal(expired(rows, Date.parse('2026-11-22T00:00:00Z')).length, 0);
+});
+
+test('deletes are capped by the budget the caller passes in', () => {
   const rows = [toDisplay('new', { thread: 'n', ...at('2026-11-22T00:00:00Z') })];
   for (let i = 0; i < MAX_DELETES + 50; i++) rows.push(toDisplay('o' + i, { thread: 'o' + i, ...at('2026-09-01T00:00:00Z') }));
   assert.equal(expired(rows, NOW).length, MAX_DELETES);
+  assert.equal(expired(rows, NOW, 5).length, 5);
+  assert.equal(expired(rows, NOW, 0).length, 0);
 });

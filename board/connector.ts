@@ -1,5 +1,5 @@
 // Connector: the only file that calls the page database. Depends on Model only. (ADR-0001 section 5)
-import type { StoredDoc, StoredRow } from './model.ts';
+import type { ExpiredIds, StoredDoc, StoredRow } from './model.ts';
 
 type Db = {
   collection(name: string): { onSnapshot(ok: (snap: { docs: { id: string; data(): StoredRow | undefined }[] }) => void, fail: (e: { code?: string }) => void): void };
@@ -9,7 +9,7 @@ type Db = {
 export type Board = {
   subscribe(onRows: (docs: StoredDoc[]) => void, onError: (code: string) => void): void;
   markSeen(docId: string): void;
-  deleteRows(docIds: string[]): Promise<void>;
+  deleteRows(docIds: ExpiredIds): Promise<void>;
 };
 
 export async function openBoard(): Promise<Board | null> {
