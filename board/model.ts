@@ -36,3 +36,6 @@ export type Group = { label: string; rows: DisplayRow[] };
 
 // Row ids the Service has checked and cleared for deletion. Only `expired()` makes one, and the delete functions accept nothing else.
 export type ExpiredIds = readonly string[] & { readonly cleared: 'expired' };
+
+// What the Client shows: the groups plus the counts, all worked out by the Service.
+export type View = { groups: Group[]; threads: number; waiting: number; stored: number; limit: number };

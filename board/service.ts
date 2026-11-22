@@ -1,5 +1,6 @@
-// Service: what the list shows. Holds every board rule, reads no clock (time is passed in). Depends on Model only.
-import type { DisplayRow, ExpiredIds, Group } from './model.ts';
+// Service: what the list shows. Holds every board rule, reads no clock (time is passed in). Depends on Model, and on Manager as a type.
+import type { DisplayRow, ExpiredIds, Group, StoredDoc, StoredRow, View } from './model.ts';
+import type { Manager } from './manager.ts';
 
 export const MAX_AGE_DAYS = 60;
 export const ROW_LIMIT = 25000; // the page database's own limit
@@ -58,4 +59,31 @@ export function groups(rows: DisplayRow[], now: number): Group[] {
     else out.push({ label, rows: [r] });
   }
   return out;
+}
+
+export type Service = {
+  watch(onView: (view: View) => void, onError: (code: string) => void): void;
+  markSeen(docId: string): void;
+};
+
+type Deps = { manager: Manager; toDisplay: (docId: string, row: StoredRow) => DisplayRow; now: () => number };
+
+// Takes the stored rows, clears and deletes the old ones through the Manager, and hands the Client what to show.
+export function createService({ manager, toDisplay, now }: Deps): Service {
+  let deleteBudget = MAX_DELETES; // across every update of this page load
+  return {
+    watch(onView, onError) {
+      manager.watchRows((docs: StoredDoc[]) => {
+        const all = docs.map(d => toDisplay(d.id, d.row));
+        const t = now();
+        const shown = groups(all, t);
+        const gone = expired(all, t, deleteBudget);
+        deleteBudget -= gone.length;
+        void manager.removeRows(gone);
+        const rows = shown.flatMap(g => g.rows);
+        onView({ groups: shown, threads: rows.length, waiting: rows.filter(isPriority).length, stored: all.length, limit: ROW_LIMIT });
+      }, onError);
+    },
+    markSeen: docId => manager.markRowSeen(docId),
+  };
 }
