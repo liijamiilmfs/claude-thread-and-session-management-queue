@@ -239,7 +239,7 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 
 ### Open, not proven
 
-- **OPEN-001**: Project name. The first live rows had no project, because the parent's record comes wrapped (CTX-025). The fix is in build `0.0.1-t8` (commit `cda4acc` on the T8 branch). Josh installed it at 2026-11-22 09:04Z. It is waiting on a live check: no row with a project name has been confirmed yet.
+- **OPEN-001**: Project name. The first live rows had no project, because the parent's record comes wrapped (CTX-025). The fix is in build `0.0.1-t8` (commit `cda4acc` on the T8 branch). Josh installed it at 2026-11-22 09:04Z. Settled: at 09:20Z rows from two threads of another project ("Choice Movers") carried `project: Choice Movers` (T8, "Live test, a project name from another project"). By 09:24Z, 37 plugin rows from 10 threads in at least 3 projects.
 - **OPEN-002**: Settled 2026-11-22: code picks the state (CTX-037).
 - **OPEN-003**: A failed write kept and retried is shown only by unit tests, not live. Proposed Milestone 1 acceptance check: one failed write kept and retried live, in one test thread.
 - **OPEN-004**: The log line `Skipping auto mode classifier for ArtifactData: called by plugin thread-queue` was read only in the T8 thread's own log. For the other four threads with rows, the proof is the rows landing and, for Josh's test thread, no `ArtifactData` call by the model in its transcript.
@@ -301,7 +301,7 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 
 ## Implementation Notes
 
-- **IMP-001**: Milestone 0 is done except OPEN-001, OPEN-003 to OPEN-006, and the four fixes in OPEN-007. The T8 test build is on branch `claude/project-thread-5rsmom` and is never merged. The build-out (Milestones 1 and 2) is not approved.
+- **IMP-001**: Milestone 0 is done except OPEN-003 to OPEN-006, and the four fixes in OPEN-007. The T8 test build is on branch `claude/project-thread-5rsmom` and is never merged. The build-out (Milestones 1 and 2) is not approved.
 - **IMP-002**: Rows on the board are written from thread text and are untrusted. The board shows titles and previews as plain text (a preview can hold markup, seen in T8) and follows a link only if it points at `https://claude.ai/`.
 - **IMP-003**: A row holds the thread id, title, project name, state, time, a one-line preview and a link. No prompts, full replies or tool input are stored. The T8 build also writes `gate: "t8-plugin"` as a test marker.
 - **IMP-004**: Install: remove any older Thread Queue plugin (`thread-queue-turnstile`), then upload the `thread-queue` zip on the account Plugins page. Two Thread Queue plugins at once spoil the proof and bring the gate back.
