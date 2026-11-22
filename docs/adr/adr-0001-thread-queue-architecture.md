@@ -58,8 +58,10 @@ Josh runs three to five Claude projects at once. Each project's threads run in t
 - **CTX-015**: The turnstile was chosen on 2026-11-21 and replaced on 2026-11-22. See CTX-035 and CTX-036.
 - **CTX-016**: The code is TypeScript. Plain JavaScript is not acceptable.
 - **CTX-018**: The project's Node version is 24.22.3. `.nvmrc` says 24.22.3 and `package.json` requires 24.22.3 or newer. Tests and the type check run on that version.
-- **CTX-029**: Which calls owe a row and what the four states mean: the T4 table, as Josh agreed on 2026-11-21 (answers q1 to q8). q6 is the exception, see OPEN-002.
+- **CTX-029**: Which calls owe a row and what the four states mean: the T4 table, as Josh agreed on 2026-11-21 (answers q1 to q8). q6 is replaced by CTX-037.
 - **CTX-035**: No row may ever go missing (2026-11-22 00:09Z): "A row going missing is not ok, that nondeterminism is a flaw I can't accept for a tool that I rely on consistently."
+- **CTX-037**: Code picks each row's state from the tool called (R10). Josh chose this on 2026-11-22 09:29Z on the choices page (https://claude.ai/artifact/8DTgXr3eJ1bAhCAXwY4Q6M), replacing his T4 answer q6.
+- **CTX-038**: On the same page Josh accepted loss items 1, 3, 5, 6, 9 and 11 as known gaps, and asked for items 2, 4, 8 and 10 to be fixed (see "What can still lose a row"). Each accepted gap gets its own Linear issue (Josh, 09:30Z).
 - **CTX-036**: Josh said no to a plugin rule that approves the model's board write (T7, 2026-11-22 01:43Z), and chose instead to have "the plugin do the save itself" (01:42Z). He approved the T8 build and live test.
 
 Rule 0 Softworks requires each repository to adopt the Software Layer Roles and Dependency Policy through a scope-adoption ADR. This record is that ADR for this repository.
@@ -96,9 +98,9 @@ These are the product.
 - **R7**: Turn end waits at most 8 seconds for the board. A broken board must never trap a thread.
 - **R8**: The only tool the module calls is `ArtifactData`, action `set`, with the board address and collection fixed in code. The only lookup is `get_session` on `claude-code-remote`, read-only. The thread's own record is read before every write pass, so a renamed title shows on the next row. The parent's record is read until a project name is found, then not again in that run.
 - **R9**: Outside a cloud thread (no thread id) the module does nothing.
-- **R10, state**: OPEN, see OPEN-002. The T8 build picks the state from the tool called:
+- **R10, state**: code picks the state from the tool called (CTX-037):
 
-| The thread did this | State in the T8 build |
+| The thread did this | State |
 |---|---|
 | Asked on a decision card | `needs_you` |
 | Posted a card with a button, or a draft to send | `needs_you` |
@@ -213,7 +215,7 @@ Not allowed in the module: `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt
 - **NEG-002**: The design depends on Josh's account having no organization guard (CTX-023). If the account moves to Team or Enterprise, or gains managed settings, the module's call is refused until an admin allows it (CTX-032), and rows wait in the note and are lost with the machine.
 - **NEG-003**: The project name rests on an undocumented title format and an undocumented wrapper around the parent's record (CTX-025). If either changes, rows go out with no project name.
 - **NEG-004**: The design rests on observed behavior (CTX-019 to CTX-026) and on a type file the docs say "can be older than the Claude Code version you have installed". Anthropic may change any of it without notice.
-- **NEG-005**: The state comes either from code (coarse: a question in a plain reply shows as `review`) or from the model (which brings the model back in). See OPEN-002.
+- **NEG-005**: The state is coarse: a question asked in a plain reply shows as `review`, and `failed` is never used (CTX-037).
 - **NEG-006**: Waiting rows (thread id, time, state, preview) sit in a small file on the thread's machine until written.
 - **NEG-007**: A row leaves Priority when Josh clicks it on the board, not when he opens the thread some other way.
 - **NEG-008**: The main chat writes no rows (CTX-022).
@@ -221,29 +223,29 @@ Not allowed in the module: `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt
 
 ### What can still lose a row
 
-From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/register.ts` at commit `cda4acc`. Josh has accepted only item 7 (T4, q8). Items 1 to 6 and 8 to 11 are not accepted (OPEN-007). Every loss is silent to Josh: it shows only in the thread's debug log, `/tmp/claude-code.log`.
+From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/register.ts` at commit `cda4acc`. Josh's answers (T4 q8 for item 7, CTX-038 for the rest) are marked on each item. Accepted items are known gaps, each with a Linear issue. Fix items must be fixed in the build-out, each by its own change Josh approves. Every loss is silent to Josh: it shows only in the thread's debug log, `/tmp/claude-code.log`.
 
-1. The board stays down until the thread's machine is reclaimed. The waiting rows are on that machine and go with it. The plugin makes no network call of its own, so it has nowhere else to put them.
-2. More than 20 rows wait at once. The oldest is dropped and the drop is logged.
-3. Josh stops a thread mid-turn. Claude Code refuses the module's calls until his next message (CTX-034). The row waits and goes out on the next turn, unless the machine is reclaimed first.
-4. A board call that never answers. Turn end stops waiting after 8 seconds. Later writes queue behind the stuck call until Claude Code restarts, then go out from the note. If the machine is reclaimed before that restart, this becomes item 1.
-5. Another plugin refuses the module's call on every retry.
-6. The account moves to a Team or Enterprise plan (NEG-002).
-7. Ways a thread reaches Josh that no tool call shows: approval prompts, crashes, threads run on his computer, messages sent outside the project app (T4, Josh's q8 accepted these blind spots).
-8. Saving the note fails (logged as `note not saved`), and Claude Code then restarts. The rows held only in memory are lost.
-9. Building or storing the row throws (logged as `row not queued`). That row is never stored.
-10. Reading the note fails when Claude Code starts. The error is swallowed, and the next save overwrites the note, losing rows an earlier run left. Damaged rows in the note are also dropped silently when it is read.
-11. A turn on a machine the plugin has not reached yet, after an upload or an update (T1: about a minute).
+1. **Accepted.** The board stays down until the thread's machine is reclaimed. The waiting rows are on that machine and go with it. The plugin makes no network call of its own, so it has nowhere else to put them.
+2. **Fix.** More than 20 rows wait at once. The oldest is dropped and the drop is logged. Fix: raise the limit.
+3. **Accepted.** Josh stops a thread mid-turn. Claude Code refuses the module's calls until his next message (CTX-034). The row waits and goes out on the next turn, unless the machine is reclaimed first.
+4. **Fix.** A board call that never answers. Turn end stops waiting after 8 seconds. Later writes queue behind the stuck call until Claude Code restarts, then go out from the note. If the machine is reclaimed before that restart, this becomes item 1. **Fix:** give each board write its own time limit, so later rows can go.
+5. **Accepted.** Another plugin refuses the module's call on every retry.
+6. **Accepted.** The account moves to a Team or Enterprise plan (NEG-002).
+7. **Accepted.** Ways a thread reaches Josh that no tool call shows: approval prompts, crashes, threads run on his computer, messages sent outside the project app (T4, Josh's q8 accepted these blind spots).
+8. **Fix.** Saving the note fails (logged as `note not saved`), and Claude Code then restarts. The rows held only in memory are lost. Fix: try the save again before moving on.
+9. **Accepted.** Building or storing the row throws (logged as `row not queued`). That row is never stored.
+10. **Fix.** Reading the note fails the first time a row is told or written in a run. The error is swallowed, and the next save overwrites the note, losing rows an earlier run left. Damaged rows in the note are also dropped silently when it is read. Fix: do not save over the note when the read failed.
+11. **Accepted.** A turn on a machine the plugin has not reached yet, after an upload or an update (T1: about a minute).
 
 ### Open, not proven
 
 - **OPEN-001**: Project name. The first live rows had no project, because the parent's record comes wrapped (CTX-025). The fix is in build `0.0.1-t8` (commit `cda4acc` on the T8 branch). Josh installed it at 2026-11-22 09:04Z. It is waiting on a live check: no row with a project name has been confirmed yet.
-- **OPEN-002**: The state rule. Josh's T4 answer q6 was that the thread picks the label every time. With no model involved, code picks it (R10). This conflicts with q6 and has not been put to Josh. It is not settled by this record.
+- **OPEN-002**: Settled 2026-11-22: code picks the state (CTX-037).
 - **OPEN-003**: A failed write kept and retried is shown only by unit tests, not live. Proposed Milestone 1 acceptance check: one failed write kept and retried live, in one test thread.
 - **OPEN-004**: The log line `Skipping auto mode classifier for ArtifactData: called by plugin thread-queue` was read only in the T8 thread's own log. For the other four threads with rows, the proof is the rows landing and, for Josh's test thread, no `ArtifactData` call by the model in its transcript.
 - **OPEN-005**: The main chat. Josh wants it on the list only by a checked, agent-free way (T4 q7). None is known.
 - **OPEN-006**: T2 stays open until rows from all four models are seen on this design.
-- **OPEN-007**: Josh's rule is that no row may go missing (CTX-035). He has accepted only loss item 7. He accepts or rejects each of items 1 to 6 and 8 to 11, or asks for a design change.
+- **OPEN-007**: Settled 2026-11-22 (CTX-038). Left to do: the four fixes (items 2, 4, 8, 10) and a Linear issue for each accepted gap.
 
 ## Alternatives Considered
 
@@ -299,7 +301,7 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 
 ## Implementation Notes
 
-- **IMP-001**: Milestone 0 is done except OPEN-001 to OPEN-007. The T8 test build is on branch `claude/project-thread-5rsmom` and is never merged. The build-out (Milestones 1 and 2) is not approved.
+- **IMP-001**: Milestone 0 is done except OPEN-001, OPEN-003 to OPEN-006, and the four fixes in OPEN-007. The T8 test build is on branch `claude/project-thread-5rsmom` and is never merged. The build-out (Milestones 1 and 2) is not approved.
 - **IMP-002**: Rows on the board are written from thread text and are untrusted. The board shows titles and previews as plain text (a preview can hold markup, seen in T8) and follows a link only if it points at `https://claude.ai/`.
 - **IMP-003**: A row holds the thread id, title, project name, state, time, a one-line preview and a link. No prompts, full replies or tool input are stored. The T8 build also writes `gate: "t8-plugin"` as a test marker.
 - **IMP-004**: Install: remove any older Thread Queue plugin (`thread-queue-turnstile`), then upload the `thread-queue` zip on the account Plugins page. Two Thread Queue plugins at once spoil the proof and bring the gate back.

@@ -86,7 +86,7 @@ These are the product, from ADR-0001 Section 2. Do not change one without a Line
 - Turn end waits at most 8 seconds for the board. A broken board must never trap a thread.
 - The only tool the module calls is `ArtifactData` `set`, with the board address and collection `turns` fixed in code. The only lookup is `get_session` on `claude-code-remote`, read-only. The T8 build's `tool.judge` listener is test evidence only and is not part of the lasting build.
 - Outside a cloud thread (no thread id) the module does nothing.
-- Who picks the state is OPEN (ADR-0001, OPEN-002). The T8 build picks it from the tool called, which conflicts with Josh's earlier answer that the thread picks. Do not settle it in code or docs. Ask Josh.
+- Code picks the state from the tool called (ADR-0001, R10, Josh 2026-11-22). A decision card, a card with a button or a draft, and a connect ask give `needs_you`. A resolve gives `finished`. Everything else gives `review`.
 
 ## Setup commands
 

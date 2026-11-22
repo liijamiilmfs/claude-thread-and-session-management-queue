@@ -70,10 +70,10 @@ Agent and contributor rules are in `AGENTS.md`.
 - A thread you stop mid-turn sends its row only after your next message.
 - Another plugin that refuses the board write every time would stop rows from that thread.
 - A lost row is silent. It shows only in the thread's own debug log, not on the board.
-- Only some of these losses have been accepted by Josh. The rest are open in the decision record (OPEN-007).
+- Josh accepted some of these as known gaps. Four are marked to be fixed in the build (decision record, "What can still lose a row").
 - The plugin works because your account has no organization guard. A move to a Team or Enterprise plan would block its board writes until an admin allows them.
 - The project name comes from a title format Anthropic has not documented. If it changes, rows show no project.
-- Who picks a row's state (needs you, review, finished) is still an open question for Josh.
+- The plugin picks a row's state from what the thread did. A question asked in a plain reply shows as review, not needs you.
 - A row leaves Priority when you click it on the board, not when you open the thread some other way.
 
 ## Support
