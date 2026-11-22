@@ -133,7 +133,7 @@ Run `npm test` (Node's built-in test runner, files named `*.test.ts`) and `npm r
 |---|---|---|
 | `install` | `npm ci` | |
 | `format` | Not defined yet | Added by `RUL-3166` |
-| `lint` | Not defined yet | `RUL-3166` plans `claude plugin validate .`. There is no manifest to check today. |
+| `lint` | `claude plugin validate .` | Needs the `claude` command. CI does not have it, so run it on your own machine. |
 | `typecheck` | `npm run typecheck` | Runs `tsc`, emits nothing |
 | `test` | `npm test` | Runs `node --test` |
 | `verify PR` | CI workflow | Typecheck plus test. Lint to come with `RUL-3166` |
