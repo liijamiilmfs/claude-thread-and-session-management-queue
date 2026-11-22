@@ -217,6 +217,7 @@ Not allowed in the module: `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt
 - **NEG-006**: Waiting rows (thread id, time, state, preview) sit in a small file on the thread's machine until written.
 - **NEG-007**: A row leaves Priority when Josh clicks it on the board, not when he opens the thread some other way.
 - **NEG-008**: The main chat writes no rows (CTX-022).
+- **NEG-009**: A new build is not instant. A running thread keeps the build it loaded until Claude Code restarts on its machine, so old and new builds write rows side by side for a while. Removing the plugin is not instant either.
 
 ### What can still lose a row
 
@@ -238,7 +239,7 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 
 - **OPEN-001**: Project name. The first live rows had no project, because the parent's record comes wrapped (CTX-025). The fix is in build `0.0.1-t8` (commit `cda4acc` on the T8 branch). Josh installed it at 2026-11-22 09:04Z. It is waiting on a live check: no row with a project name has been confirmed yet.
 - **OPEN-002**: The state rule. Josh's T4 answer q6 was that the thread picks the label every time. With no model involved, code picks it (R10). This conflicts with q6 and has not been put to Josh. It is not settled by this record.
-- **OPEN-003**: A failed write kept and retried is shown only by unit tests, not live.
+- **OPEN-003**: A failed write kept and retried is shown only by unit tests, not live. Proposed Milestone 1 acceptance check: one failed write kept and retried live, in one test thread.
 - **OPEN-004**: The log line `Skipping auto mode classifier for ArtifactData: called by plugin thread-queue` was read only in the T8 thread's own log. For the other four threads with rows, the proof is the rows landing and, for Josh's test thread, no `ArtifactData` call by the model in its transcript.
 - **OPEN-005**: The main chat. Josh wants it on the list only by a checked, agent-free way (T4 q7). None is known.
 - **OPEN-006**: T2 stays open until rows from all four models are seen on this design.
@@ -304,6 +305,7 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 - **IMP-004**: Install: remove any older Thread Queue plugin (`thread-queue-turnstile`), then upload the `thread-queue` zip on the account Plugins page. Two Thread Queue plugins at once spoil the proof and bring the gate back.
 - **IMP-005**: The board removes rows older than 30 days. Its database holds at most 25,000 rows.
 - **IMP-006**: Work is assigned under the Agent Routing and Capacity Contract v0.9. Josh approves each issue and its tier before work starts. Agents do not merge pull requests. A Haiku worker makes all Linear writes from an exact spec. Any change to what the module may call (Section 6) is a Specialist trigger.
+- **IMP-009** (PROPOSAL, for NEG-009): every row carries the version of the build that wrote it. Row shape changes are additions only, and the board reads every older shape. The waiting-rows note stays readable by the next build. After an upload, the board can show which build wrote each thread's newest row.
 - **IMP-007**: Success is the Milestone 2 check: threads in at least three projects finish turns within the same few minutes and all show on the board, and one week of use gives a count of missed turns.
 - **IMP-008**: To check a thread: its Claude Code log at `/tmp/claude-code.log` shows `hooks module thread-queue@synced loaded`, and a line `thread-queue: row <id> written by the plugin` per row, or `not written, kept` with the reason.
 
