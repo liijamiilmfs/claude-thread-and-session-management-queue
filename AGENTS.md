@@ -105,9 +105,9 @@ Safety check rules (ADR-0001, R8 and R11 to R14, built under `RUL-3168`):
 - It runs right before every write, on every row: fresh, tried again, or read back from the note. The note is not trusted.
 - Right before every write, code compares the call with the one approved shape (the last look). A call that fails is replaced by a bare row.
 - Title, project and preview are cleaned. Text that looks like a secret has its whole field swapped for a fixed stand-in. The strict rule applies: hide on any doubt.
-- Hidden text is never logged, never stored and never sent to the model.
+- Text a code rule hid is never logged, never stored and never sent to the model. Text the model hides is never logged.
 - One small model call looks at the cleaned title and preview. It can only hide text. No answer means hide. It never runs past the turn end wait.
-- The model call is allowed only after the live test passes (ADR-0001, OPEN-008). If that test fails, the module makes no model call and the ADR is changed back before any code.
+- The model call is allowed only after the live test passes (ADR-0001, OPEN-008). If that test fails, stop and tell Josh first. Then the module makes no model call and the ADR is changed back before any code. This is the one fallback Josh approved.
 - Every row carries `check` (`ok`, `hidden`, `hidden-ai`, `hidden-noai` or `bare`). `dropped` says how many waiting rows the module gave up on.
 - Every waiting row gives exactly one row on the board: its own row or a bare row.
 
@@ -140,11 +140,14 @@ Record each command you run with its name, text, result (`pass`, `fail` or `inco
 
 ## Pull request guidelines
 
+Confirmed by Josh:
+
+- Every pull request description carries a Linear keyword for its issue, on a line of its own (Josh, 2026-11-22). `Fixes RUL-xxxx` when merging the pull request finishes the issue. `Refs RUL-xxxx` when work on the issue is left after the merge. A pull request with neither is not finished.
+
 Proposed, mirroring the Rule 0 Softworks platform repository. Confirm with Josh before relying on them.
 
 - Conventional Commit prefixes such as `feat:`, `fix:` and `docs:`.
 - No attribution lines in commits or pull request descriptions.
-- Every pull request description carries a Linear keyword for its issue, on a line of its own (Josh, 2026-11-22). `Fixes RUL-xxxx` when merging the pull request finishes the issue. `Refs RUL-xxxx` when work on the issue is left after the merge. A pull request with neither is not finished.
 - Never force-push a shared branch, resolve review threads, or merge.
 
 ## Security and secrets
@@ -153,7 +156,7 @@ Proposed, mirroring the Rule 0 Softworks platform repository. Confirm with Josh 
 - Rows hold text a thread wrote (its title and the first line of its reply). Treat them as untrusted: show them as plain text, and follow a link only if it points at `https://claude.ai/`. The approved board follow-up tightens this: the board builds the link itself from the thread id and ignores the row's `url` (ADR-0001, IMP-002).
 - The module's board write runs with no approval prompt and without Anthropic's own safety check. Josh does not accept a write with no check at all (ADR-0001, CTX-039), so the plugin's own safety check runs on every row. Do not ship a build that writes rows without it, and do not weaken it.
 - The module makes no network call of its own, holds no secret, and uses no `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt`, `$.session`, `$.agent` or `$.model.fork`. Its only `$.model` use is the one call of the safety check, which sends the cleaned title and preview of one row and nothing else (Josh approved this trust boundary change on 2026-11-22). Adding any of these, or any other tool call, is a trust boundary change: stop and ask Josh.
-- The plugin's note (`$.store`) holds only the rows still waiting: at most 20, each a thread id, time, state and preview, and the count of dropped rows. The note never holds text the safety check hid. The module's `$.ui.log` lines also land in the thread's `/tmp/claude-code.log`, with row ids and up to 200 characters of error text. Nothing else is written to disk.
+- The plugin's note (`$.store`) holds only the rows still waiting: at most 20, each a thread id, time, state and preview, and the count of dropped rows. The note never holds text a code rule hid. Text the model later hides sits there until its row is written. The module's `$.ui.log` lines also land in the thread's `/tmp/claude-code.log`, with row ids and up to 200 characters of error text. Nothing else is written to disk.
 - No secrets belong in this repository.
 
 ## Scope boundaries
