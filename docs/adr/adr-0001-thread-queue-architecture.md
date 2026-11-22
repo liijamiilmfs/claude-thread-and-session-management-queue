@@ -1,6 +1,6 @@
 ---
 title: "ADR-0001: Thread Queue board and row-saving plugin, and software layers adoption"
-status: "Proposed"
+status: "Accepted"
 date: "2026-11-22"
 authors: "Josh (adoption owner and approver)"
 tags: ["architecture", "decision", "scope-adoption", "claude-code-plugin"]
@@ -12,9 +12,9 @@ superseded_by: ""
 
 ## Status
 
-**Proposed** | Accepted | Rejected | Superseded | Deprecated
+Proposed | **Accepted** | Rejected | Superseded | Deprecated
 
-This record stays Proposed until Josh marks it Accepted. The software layers policy is not Active for this repository until then.
+Josh accepted this record on 2026-11-22 at 09:32Z, on a decision card in the Claude project. The software layers policy is Active for this repository from that date. The build-out (Milestones 1 and 2) still needs Josh's approval issue by issue.
 
 Earlier drafts described a pane inside the desktop app (dropped by Josh on 2026-11-21) and then a turnstile that blocked a thread until its model wrote the row (replaced on 2026-11-22 after Milestone 0, see "Alternatives Considered"). No draft was approved, so this text replaces them and nothing is superseded.
 
@@ -133,7 +133,7 @@ Rationale: the module is code and runs whether or not the model remembers (CTX-0
 | Governed scopes | `hooks/register.ts`, `hooks/row.ts` and `board/board.ts` |
 | Exclusions | Test files (`*.test.ts`), JSON manifests and config, and documentation |
 | Adoption owner | Josh |
-| Approval date | Pending |
+| Approval date | 2026-11-22 |
 | Classification record | Section 5 of this record |
 | Same-role compositions (6.2) | None |
 | Consumer transport Connectors (6.3) | None |
@@ -143,7 +143,7 @@ Rationale: the module is code and runs whether or not the model remembers (CTX-0
 | Enforcement | Code review, plus the `claude plugin validate .` list in Section 3 |
 | Effective date | The approval date |
 
-### 5. Classification record (PROPOSAL for Josh)
+### 5. Classification record
 
 The planned six gate files no longer match: there is no gate. The T8 build has two files, and this proposal keeps them.
 

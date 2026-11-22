@@ -3,7 +3,7 @@
 One list of your Claude project threads across every project, with freshly finished turns on top.
 
 > [!NOTE]
-> Status: planning. There is nothing to install yet. The design is recorded in `docs/adr/adr-0001-thread-queue-architecture.md` and waits on Josh's approval. A test build of the plugin wrote 14 rows from 5 threads by itself on 2026-11-22.
+> Status: planning. There is nothing to install yet. The design is recorded in `docs/adr/adr-0001-thread-queue-architecture.md` and was accepted on 2026-11-22. A test build of the plugin wrote 37 rows from 10 threads in 3 projects by itself that morning.
 
 ## What it does
 

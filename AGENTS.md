@@ -17,7 +17,7 @@ Thread Queue gives Josh one list of his Claude cloud project threads across all 
 
 TypeScript. Plain JavaScript is not acceptable. Claude Code loads the module's `.ts` files directly, so the plugin has no build step. The board's script is compiled with `tsc` when the board is published.
 
-Status: planning. The repository has no product code yet. Do not write code until `docs/adr/adr-0001-thread-queue-architecture.md` is Accepted. Milestone 0 evidence is in the Claude project's shared folder under `thread-queue/m0-evidence/`. The live-tested build (T8) is on branch `claude/project-thread-5rsmom`, which is never merged. An older plain JavaScript prototype sits under `thread-queue/prototype/`.
+Status: planning. The repository has no product code yet. `docs/adr/adr-0001-thread-queue-architecture.md` was Accepted on 2026-11-22. Do not write code until Josh approves the build-out issue for it. Milestone 0 evidence is in the Claude project's shared folder under `thread-queue/m0-evidence/`. The live-tested build (T8) is on branch `claude/project-thread-5rsmom`, which is never merged. An older plain JavaScript prototype sits under `thread-queue/prototype/`.
 
 ## Issue tracking
 
@@ -40,9 +40,9 @@ The routing contract governs who does what. Its rules that bind work here:
 
 ## Architecture
 
-This repository follows the Software Layer Roles and Dependency Policy v2.0.0-rc.4 once ADR-0001 is Accepted. The ADR holds the classification record. The policy file is not copied into this repository. Its home and exact version are named in the ADR.
+This repository follows the Software Layer Roles and Dependency Policy v2.0.0-rc.4 (ADR-0001, Accepted 2026-11-22). The ADR holds the classification record. The policy file is not copied into this repository. Its home and exact version are named in the ADR.
 
-Planned plugin files (a proposal in the ADR, Section 5, until Josh accepts it):
+Planned plugin files (ADR-0001, Section 5):
 
 | File | Role |
 |---|---|
