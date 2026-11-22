@@ -11,15 +11,18 @@ const approved: Record<string, string> = {
   calls: 'nothing on $',
 };
 
-const run = spawnSync('claude', ['plugin', 'validate', '.'], { encoding: 'utf8' });
-const missing = run.error !== undefined;
-// CI installs the claude command (RUL-3207). There a missing command fails. It never skips.
+// CI installs the claude command (RUL-3207) and names the checked file in CLAUDE_BIN.
+// There the test runs that exact file, never a "claude" found by name, and a missing one fails. It never skips.
 const inCI = Boolean(process.env.CI);
+const bin = process.env.CLAUDE_BIN;
+const run = spawnSync(bin ?? 'claude', ['plugin', 'validate', '.'], { encoding: 'utf8' });
+const missing = run.error !== undefined;
 
 test(
   missing && !inCI ? 'plugin abilities (SKIPPED: the claude command is not on this machine)' : 'plugin abilities match the approved lists',
   { skip: missing && !inCI },
   () => {
+    assert.ok(!inCI || bin, 'in CI, CLAUDE_BIN must name the claude file that was checked against the recorded hash');
     assert.equal(run.error, undefined, 'the claude command did not run, and in CI this check may not be skipped');
     assert.equal(run.status, 0, run.stdout + run.stderr);
     const found: Record<string, string> = {};

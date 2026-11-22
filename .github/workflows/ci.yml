@@ -28,8 +28,13 @@ jobs:
       # The abilities test needs the claude command (ADR-0001 Section 3, RUL-3207).
       # One exact version, straight from Anthropic's release folder. The file is checked
       # against the hash recorded here before it is made runnable. A wrong hash fails the run.
-      # To change the version: take the linux-x64 checksum from that release's signed
-      # manifest.json (https://code.claude.com/docs/en/setup, "Binary integrity and code signing").
+      # The test runs this exact file through CLAUDE_BIN. It is not put on the search path.
+      # To change the version (https://code.claude.com/docs/en/setup, "Binary integrity and code signing"):
+      #   1. Verify that release's manifest.json.sig, and confirm the primary key fingerprint is
+      #      31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE, the one the setup page lists.
+      #   2. Only then copy the linux-x64 checksum from that manifest.json.
+      #   3. Do the verify on a GitHub runner (downloads.claude.ai is blocked from cloud threads),
+      #      and link its log in the pull request that changes the version.
       - name: Install the claude command
         env:
           CLAUDE_VERSION: 2.1.330
@@ -42,7 +47,7 @@ jobs:
             "https://downloads.claude.ai/claude-code-releases/$CLAUDE_VERSION/linux-x64/claude"
           echo "$CLAUDE_SHA256  $RUNNER_TEMP/claude-bin/claude" | sha256sum --check --strict
           chmod +x "$RUNNER_TEMP/claude-bin/claude"
-          echo "$RUNNER_TEMP/claude-bin" >> "$GITHUB_PATH"
+          echo "CLAUDE_BIN=$RUNNER_TEMP/claude-bin/claude" >> "$GITHUB_ENV"
       - run: npm run typecheck
       - run: npm run build:board
       - run: npm test

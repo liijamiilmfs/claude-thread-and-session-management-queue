@@ -154,7 +154,7 @@ Run `npm test` (Node's built-in test runner, files named `*.test.ts`) and `npm r
 |---|---|---|
 | `install` | `npm ci` | |
 | `format` | Not defined yet | Added by `RUL-3166` |
-| `lint` | `claude plugin validate .` | Needs the `claude` command. CI installs version 2.1.330, checked against a recorded hash, and the abilities test runs it. In CI a missing command fails the run. On other machines the test reports itself as skipped. |
+| `lint` | `claude plugin validate .` | Needs the `claude` command. CI installs version 2.1.330, checked against a recorded hash, and the abilities test runs that exact file (`CLAUDE_BIN`). In CI a missing command fails the run. On other machines the test reports itself as skipped. |
 | `typecheck` | `npm run typecheck` | Runs `tsc`, emits nothing |
 | `test` | `npm test` | Runs `node --test` |
 | `build board` | `npm run build:board` | Compiles the board's files. CI runs it on every pull request |
