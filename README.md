@@ -3,7 +3,7 @@
 One list of your Claude project threads across every project, with freshly finished turns on top.
 
 > [!NOTE]
-> Status: building. There is nothing to install yet. The design is recorded in `docs/adr/adr-0001-thread-queue-architecture.md` and was accepted on 2026-11-22. A test build of the plugin wrote 37 rows from 10 threads in 3 projects by itself that morning. Josh approved the first build milestone the same day. The row rules are written and tested. The board page and the plugin are being built.
+> Status: building. There is nothing to install yet. The design is recorded in `docs/adr/adr-0001-thread-queue-architecture.md` and was accepted on 2026-11-22. A test build of the plugin wrote 37 rows from 10 threads in 3 projects by itself that morning. Josh approved the first build milestone the same day. The row rules are written and tested. The board page's code and the plugin's empty shell are merged. The plugin's hooks are not wired in yet.
 
 ## What it does
 
@@ -58,15 +58,15 @@ Agent and contributor rules are in `AGENTS.md`.
 |---|---|
 | `docs/adr/` | Decision records |
 | `docs/agent-routing-contract.md` | A synced copy of the Rule 0 Softworks routing contract. Do not edit it here. |
-| `.claude-plugin/`, `hooks/` | The plugin. The row rules and their tests are in `hooks/row.ts`. The rest is planned. |
-| `board/` | Planned: the board page |
+| `.claude-plugin/`, `hooks/` | The plugin. The row rules and their tests are in `hooks/row.ts`. `hooks/register.ts` is an empty shell until the safety check is wired in. |
+| `board/` | The board page: `index.html` and one TypeScript file per layer, started by `main.ts` |
 
 ## Limits
 
 - The main chat of each project gets no rows. It has no way to write to the board.
 - Ways a thread reaches you without a tool call get no row: approval prompts, crashes, and messages sent outside the project app.
 - If the board stays down until a thread's machine is shut down, that thread's waiting rows are lost with it.
-- At most 20 rows wait at once. Past that, the oldest is dropped.
+- At most 500 rows wait at once, once that fix is built (20 before it). Past that, the oldest is dropped.
 - A thread you stop mid-turn sends its row only after your next message.
 - Another plugin that refuses the board write every time would stop rows from that thread.
 - A lost row is silent. It shows only in the thread's own debug log, not on the board.
