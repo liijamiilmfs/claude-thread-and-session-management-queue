@@ -30,36 +30,6 @@ jobs:
       # against the hash recorded here before it is made runnable. A wrong hash fails the run.
       # To change the version: take the linux-x64 checksum from that release's signed
       # manifest.json (https://code.claude.com/docs/en/setup, "Binary integrity and code signing").
-      - name: Install the claude command
-        env:
-          CLAUDE_VERSION: 2.1.330
-          CLAUDE_SHA256: f390eaa0814e6a1bff74cbb47acb74cb9c89d30ced809fe0af5af00c7bfe8ebb
-        run: |
-          set -euo pipefail
-          mkdir "$RUNNER_TEMP/claude-bin"
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/claude-bin/claude" \
-            "https://downloads.claude.ai/claude-code-releases/$CLAUDE_VERSION/linux-x64/claude"
-          echo "$CLAUDE_SHA256  $RUNNER_TEMP/claude-bin/claude" | sha256sum --check --strict
-          chmod +x "$RUNNER_TEMP/claude-bin/claude"
-          echo "$RUNNER_TEMP/claude-bin" >> "$GITHUB_PATH"
-      - name: PROOF ONLY, reverted in the next commit. Verify the signed manifest and show its checksum
-        run: |
-          set -euo pipefail
-          cd "$RUNNER_TEMP"
-          REPO=https://downloads.claude.ai/claude-code-releases
-          VERSION=2.1.330
-          curl -fsSL -o key.asc https://downloads.claude.ai/keys/claude-code.asc
-          gpg --import key.asc
-          gpg --fingerprint security@anthropic.com
-          curl -fsSLO "$REPO/$VERSION/manifest.json"
-          curl -fsSLO "$REPO/$VERSION/manifest.json.sig"
-          gpg --with-fingerprint --verify manifest.json.sig manifest.json
-          gpg --status-fd 1 --verify manifest.json.sig manifest.json 2>/dev/null | grep -q '^\[GNUPG:\] VALIDSIG 31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE '
-          jq '{version, linux_x64: .platforms["linux-x64"]}' manifest.json
-          test "$(jq -r '.platforms["linux-x64"].checksum' manifest.json)" = "$(sha256sum claude-bin/claude | cut -d' ' -f1)"
-          echo "The installed file matches the signed manifest."
-          claude --version
       - run: npm run typecheck
       - run: npm run build:board
       - run: npm test
