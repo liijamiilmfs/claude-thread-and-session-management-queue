@@ -15,9 +15,9 @@ Thread Queue gives Josh one list of his Claude cloud project threads across all 
 - **The board**: one private Artifact page with a small built-in database. One row per finished turn.
 - **The plugin** (`thread-queue`): a Claude Code plugin with one hooks module. Each time a thread tells the person something, the module's own code writes the thread's row to the board. The thread's model writes nothing, and no turn is ever blocked.
 
-TypeScript. Plain JavaScript is not acceptable. Claude Code loads the module's `.ts` files directly, so the plugin has no build step. The board's script is compiled with `tsc` when the board is published.
+TypeScript. Plain JavaScript is not acceptable. Claude Code loads the module's `.ts` files directly, so the plugin has no build step. The board's files are compiled with `tsc` when the board is published.
 
-Status: planning. The repository has no product code yet. `docs/adr/adr-0001-thread-queue-architecture.md` was Accepted on 2026-11-22. Do not write code until Josh approves the build-out issue for it. Milestone 0 evidence is in the Claude project's shared folder under `thread-queue/m0-evidence/`. The live-tested build (T8) is on branch `claude/project-thread-5rsmom`, which is never merged. An older plain JavaScript prototype sits under `thread-queue/prototype/`.
+Status: building Milestone 1. `docs/adr/adr-0001-thread-queue-architecture.md` was Accepted on 2026-11-22, and Josh approved Milestone 1 the same day. Write code only under an issue Josh has approved, at its approved tier. The row rules are in `hooks/row.ts` with their tests. Milestone 2 is not approved. Milestone 0 evidence is in the Claude project's shared folder under `thread-queue/m0-evidence/`. The live-tested build (T8) is on branch `claude/project-thread-5rsmom`, which is never merged. An older plain JavaScript prototype sits under `thread-queue/prototype/`.
 
 ## Issue tracking
 
@@ -61,9 +61,17 @@ Planned plugin files (ADR-0001, Section 5):
 | `hooks/register.ts` | Sections: Composition Root, Controller, Service, Manager, Connector |
 | `hooks/row.ts` | The Service's rules (its owned support) and Model |
 
-Claude Code lets the `$` object be passed only to top-level functions of the module's own file, so every `$` call lives in `hooks/register.ts`. Its sections are marked by comments naming the role.
+Claude Code lets the `$` object be passed only to top-level functions of the module's own file, so every `$` call lives in `hooks/register.ts`. Its sections are marked by comments naming the role. It is the only file that holds more than one role. Everywhere else, one file holds one layer (Josh, 2026-11-22, ADR-0001 CTX-049).
 
-The board is a page, `board/index.html` (markup and styles only), and one script, `board/board.ts`. The script's sections are marked by comments naming the role: Client, Service, Connector, Transformer, Model.
+The board is a page, `board/index.html` (markup and styles only), and one TypeScript file per layer (ADR-0001, Section 5). Each file starts with a comment naming its role.
+
+| File | Role |
+|---|---|
+| `board/client.ts` | Client |
+| `board/service.ts` | Service |
+| `board/connector.ts` | Connector |
+| `board/transformer.ts` | Transformer |
+| `board/model.ts` | Model |
 
 Rules a reviewer checks:
 
@@ -76,7 +84,8 @@ Rules a reviewer checks:
 - `$.tool.call(` appears once in `hooks/register.ts`. `$.model.` appears once. `$.model.fork` never appears.
 - Only `hooks/register.ts` calls `$.env.get` and `$.clock`.
 - `claude plugin validate .` lists what the module can do (`hooks:`, `calls:`, `env reads:`, `env writes:`). Any change to that list needs the ADR changed first.
-- On the board, only the Connector section calls the page database, and only the Client section touches the document.
+- On the board, only `board/connector.ts` calls the page database, and only `board/client.ts` touches the document.
+- `board/service.ts`, `board/connector.ts` and `board/transformer.ts` import only `board/model.ts`. `board/model.ts` imports nothing. Only `board/client.ts` imports the other layers.
 - Do not add a role, a folder, a dependency or a hosted service the ADR does not name. Change the ADR first.
 
 TypeScript rules:
@@ -121,7 +130,7 @@ Node 24.22.3 or later (pinned in `.nvmrc`). Install with `npm ci`. Node runs Typ
 
 ## Development workflow
 
-Not defined yet. The plugin has no build step. `RUL-3169` defines the command that compiles the board's script at publish time.
+Not defined yet. The plugin has no build step. `RUL-3169` defines the command that compiles the board's files at publish time.
 
 ## Testing instructions
 

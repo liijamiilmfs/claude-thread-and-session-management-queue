@@ -23,6 +23,8 @@ Changed on 2026-11-22 under `RUL-3192`, after acceptance. Josh approved each cha
 
 The design and its evidence are in the Claude project's shared folder, `thread-queue/m1-evidence/RUL-3168-safety.md` (REF-011). No code for the safety check exists yet. It is built under `RUL-3168`.
 
+Changed on 2026-11-22 under `RUL-3204`, at Josh's request: the board's code is one file per layer, not one script with a section per layer (CTX-049, Section 5). The plugin keeps its sections, for the reason given in Section 5.
+
 Earlier drafts described a pane inside the desktop app (dropped by Josh on 2026-11-21) and then a turnstile that blocked a thread until its model wrote the row (replaced on 2026-11-22 after Milestone 0, see "Alternatives Considered"). No draft was approved, so this text replaces them and nothing is superseded.
 
 Milestone 0 evidence lives outside the repository, in the Claude project's shared folder under `thread-queue/m0-evidence/` (`T1.md` to `T8.md`). Each fact below names its report.
@@ -81,6 +83,7 @@ Josh runs three to five Claude projects at once. Each project's threads run in t
 - **CTX-042**: The board keeps rows for 60 days, not 30 (2026-11-22 10:05Z, project chat). Only rows in the board's own database are ever deleted, never anything in a thread. The board shows how much of its storage is in use, and Josh checks that after 30 days.
 - **CTX-043**: On the safety choices page (REF-012, 2026-11-22 10:26Z to 10:28Z) Josh said yes to the two row marks `check` and `dropped` (R14), to the board follow-up (IMP-002), and to four known limits: text meant to trick an AI, who wrote a row, other plugins, and the board filling up (see "Known limits of the safety check" and loss item 12). Each accepted limit gets its own Linear issue.
 - **CTX-044**: On the Milestone 1 approval page (2026-11-22 09:54Z to 09:57Z) Josh said yes to IMP-009 (every row carries its build version, row shape changes only add fields, the board reads older shapes) and to the abilities check in Section 3.
+- **CTX-049**: The board's code is one file per layer (2026-11-22 12:28Z to 12:33Z, thread "Build the board page"). Josh does not want several layers packed into one file. Before this, the board was one script, `board/board.ts`, with a section per layer. A throwaway test page showed that the page host lets the board's scripts load each other: Josh saw "SPLIT OK: HELLO" (REF-013). The plugin cannot follow, because of the `$` limit in Section 5.
 
 Rule 0 Softworks requires each repository to adopt the Software Layer Roles and Dependency Policy through a scope-adoption ADR. This record is that ADR for this repository.
 
@@ -179,7 +182,7 @@ The four states and their meanings, in order (T4 section 2, Josh's q5): `needs_y
 - A second build check, the source test, is a plain test on the text of the two plugin files. It runs in CI with no `claude` command. It passes only if: `$.tool.call(` appears once in `hooks/register.ts`. `$.mcp.call(` appears only with `claude-code-remote` and `get_session`. None of `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt`, `$.session`, `$.agent` appears. `$.model.` appears once, as the one call R13 allows, and `$.model.fork` never appears. `hooks/row.ts` has no `import` and no `$`. The Service section of `hooks/register.ts` never calls anything on `$`. No cast to the checked call type appears outside `hooks/row.ts`.
 - `build` comes from a constant in `hooks/register.ts`. A test fails when it differs from the version in `.claude-plugin/plugin.json`.
 - Release check: the zip is built from a merged commit and its checksum is recorded. After the upload, the checksum of the file that reached a thread's machine is compared with it, as T8 did.
-- A browser cannot run TypeScript, so the board's script is compiled with `tsc` when the board is published. The compiled file is published beside the page and is not committed.
+- A browser cannot run TypeScript, so the board's files are compiled with `tsc` when the board is published, one `.js` file for each `.ts` file. The compiler also turns each `.ts` import into a `.js` import, so no new build tool is added. The compiled files are published beside the page and are not committed.
 
 Rationale: the module is code and runs whether or not the model remembers (CTX-014). Its own call skips the safety check that refused one model-written row in five (CTX-021, CTX-024), which is what CTX-035 needs. In that check's place the plugin's own check runs on every row (R11 to R14), which is what CTX-039 needs. It finds the title and project itself (CTX-025), which removes the only reason the model had a part. Nothing is hosted, no network rule changes, and no secret is stored.
 
@@ -190,7 +193,7 @@ Rationale: the module is code and runs whether or not the model remembers (CTX-0
 | Policy | Software Layer Roles and Dependency Policy, `R0S-ARCH-LAYERS`, version `2.0.0-rc.4` |
 | Immutable artifact identifier | File `docs/architecture/software-layers-v2.0.0-rc.4.md` in `Rule-0-Softworks/rule-0-softworks-platform` at commit `32e4c1c548d3bbef05dd66460f72536cf5253872`, SHA-256 `84f1792b0a3b583cfd0486aa5e40e31fd71e542d2d88f6bf8e88d610155b6fcd` |
 | Previously Active policy | None. This is a new repository. |
-| Governed scopes | `hooks/register.ts`, `hooks/row.ts` and `board/board.ts` |
+| Governed scopes | `hooks/register.ts`, `hooks/row.ts`, `board/model.ts`, `board/transformer.ts`, `board/service.ts`, `board/connector.ts` and `board/client.ts` |
 | Exclusions | Test files (`*.test.ts`), JSON manifests and config, and documentation |
 | Adoption owner | Josh |
 | Approval date | 2026-11-22 |
@@ -207,7 +210,7 @@ Rationale: the module is code and runs whether or not the model remembers (CTX-0
 
 The planned six gate files no longer match: there is no gate. The T8 build has two files, and this proposal keeps them.
 
-One limit shapes the split. Claude Code's checker lets the `$` object be passed only to top-level functions of the module's own file (T8, `claude plugin validate`). So every `$` call has to live in `hooks/register.ts`. That file is classified by section, as the board's script already is. Each section starts with a comment naming its role.
+One limit shapes the split. Claude Code's checker lets the `$` object be passed only to top-level functions of the module's own file (T8, `claude plugin validate`). So every `$` call has to live in `hooks/register.ts`. That file is classified by section. Each section starts with a comment naming its role. It is the only file in this scope that holds more than one role, and only because of that limit. Where files can be split, they are: the board is one file per layer (CTX-049).
 
 | File or section | Role | What lives there |
 |---|---|---|
@@ -229,19 +232,21 @@ Who calls the safety check (settles OPEN-010, the planning thread's answer, 2026
 - The types in `hooks/row.ts` are Models. They hold no reference to the functions, because a Model must not depend on support (3.1).
 - No file is added for the safety code.
 
-The board is a page, `board/index.html`, that holds markup and styles only, and one script, `board/board.ts`, classified by section:
+The board is a page, `board/index.html`, that holds markup and styles only, and five TypeScript files, one per layer (CTX-049). Each file starts with a comment naming its role.
 
-| Section of `board/board.ts` | Role | What lives there |
-|---|---|---|
-| Client | Client | Drawing rows, the click handler, status text |
-| Service | Service | Newest row per thread, Priority rule, day grouping |
-| Connector | Connector | The only code that calls the page database |
-| Transformer | Transformer | Stored row to display row |
-| Model | Model | The display row shape |
+| File | Role | What lives there | May import |
+|---|---|---|---|
+| `board/client.ts` | Client | Drawing rows, the click handler, status text. The only file that touches the document | Service, Connector (see OPEN-017), Transformer, Model |
+| `board/service.ts` | Service | Newest row per thread, Priority rule, day grouping, which rows are past 60 days (IMP-005) | Model |
+| `board/connector.ts` | Connector | The only file that calls the page database | Model |
+| `board/transformer.ts` | Transformer | Stored row to display row | Model |
+| `board/model.ts` | Model | The stored row, display row and group shapes | Nothing |
+
+The page names only the compiled `client.js`. The browser loads the other four through its imports, which the test page showed the page host allows (CTX-049).
 
 Roles this scope does not use: Domain, Gateway, Provider (first-party), Contract and Entity. The plugin has no Transformer and no Client. The board has no Controller and no Manager. With no Domain types, each Service holds its rules, as policy Section 5.3 allows.
 
-Dependencies used, all inside the policy's allow-list. An earlier text of this table listed Controller to Manager, which is not on the list. That edge is gone.
+Dependencies used. All are inside the policy's allow-list except the board's Client to Connector, which is open (OPEN-017). An earlier text of this table listed Controller to Manager, which is not on the list. That edge is gone.
 
 | From | To |
 |---|---|
@@ -265,8 +270,9 @@ The time and the thread id are read in `hooks/register.ts` and passed into `hook
 | `$.mcp.call` (`claude-code-remote` `get_session`) | External Connector facility | Connector section only |
 | One model call, `$.model.complete` or `$.model.classify` (R13) | External Connector facility | Connector section only |
 | `$.tool.list`, `$.ui.log` | Diagnostics | `hooks/register.ts` only |
-| The page database (`claude.use("db")`) | External Connector facility | The board's Connector section only |
-| The browser document | Framework response writing | The board's Client section only |
+| The page database (`claude.use("db")`) | External Connector facility | `board/connector.ts` only |
+| The browser document | Framework response writing | `board/client.ts` only |
+| The browser clock (`Date`) | External Provider abstraction | `board/client.ts` and `board/connector.ts` only. `board/service.ts` gets the time passed in. |
 
 Not allowed in the module: `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt`, `$.session`, `$.agent`, `$.model.fork`, any `$.model` use other than the one call in R13, and any tool call other than the one in R8. Adding one is a trust boundary change: stop and ask Josh.
 
@@ -345,6 +351,7 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 - **OPEN-012**: Whether a thread's machine is ever reused for another thread. Assumed not. If it is, R11 would turn the other thread's waiting rows into bare rows for this thread.
 - **OPEN-013**: Add only (R8) and a retry. If a write lands but reports a failure, the retry is refused because the row exists. As written, that row would wait forever at the front of the line and could push other rows past the waiting limit. Proposed rule, found in review of `RUL-3192`: a refusal because the row already exists counts as written, since row ids never repeat. It is a change to a row rule, so it needs Josh's yes before `RUL-3168` code.
 - **OPEN-014**: Two points the `RUL-3168` brief must settle, found in the same review. The let-through for Claude's own ids (R12) must match the full id shape, not just the start, or a key glued to `session_` would pass. And which `check` value wins when two apply, and which value a row carries when the look is skipped near turn end (R7).
+- **OPEN-017** (PROPOSED, pending Josh, found in review of `RUL-3204`): the board's Client calls its Connector to delete rows past 60 days and to mark a row seen. Policy 5.2 lets a Client call a Connector only as a thin facade, with no orchestration and no persistence, so this edge does not fit as built. Two ways: (a) add `board/manager.ts`, so the board's road is Client, Service, Manager, Connector, the same road as the plugin's; or (b) an exception ADR. The reviewer and the writer pick (a), because the delete is the only board code that destroys data. Choice (a) changes the board's code and the line "The board has no Controller and no Manager". The same answer should cover policy Section 9: the board has no Composition Root that hands each file its collaborators, and no exception is recorded. Until Josh answers, the board stays as built.
 
 ## Alternatives Considered
 
@@ -415,7 +422,7 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 
 ## Implementation Notes
 
-- **IMP-001**: Milestone 0 is done except OPEN-003 to OPEN-006, and the four fixes in OPEN-007. The T8 test build is on branch `claude/project-thread-5rsmom` and is never merged. The build-out (Milestones 1 and 2) is not approved.
+- **IMP-001**: Milestone 0 is done except OPEN-003 to OPEN-006, and the four fixes in OPEN-007. The T8 test build is on branch `claude/project-thread-5rsmom` and is never merged. Josh approved Milestone 1 on 2026-11-22, each issue with its tier. Milestone 2 is not approved.
 - **IMP-002**: Rows on the board are written from thread text and are untrusted. The board shows titles and previews as plain text (a preview can hold markup, seen in T8) and follows a link only if it points at `https://claude.ai/`.
   - Board follow-up, approved by Josh (CTX-043), built as its own issue after the board page (`RUL-3169`):
     - The board checks each row's shape when it reads it. An odd row is shown in its own group with a warning, as plain text, with no link. It is never hidden.
@@ -444,3 +451,4 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 - **REF-010**: Milestone 0 reports `T1.md` to `T8.md`, Claude project shared folder, `thread-queue/m0-evidence/`
 - **REF-011**: Safety design for the row write, `RUL-3168-safety.md`, Claude project shared folder, `thread-queue/m1-evidence/`
 - **REF-012**: Josh's safety choices page, https://claude.ai/artifact/CHdL5uTkAMfDCvSEWEA6ru
+- **REF-013**: The board split test: throwaway page https://claude.ai/artifact/4XBSMAByRaTTf6mrkMdzdc, and the board page report `RUL-3169.md` (update of 2026-11-22 12:40Z), Claude project shared folder, `thread-queue/m1-evidence/`
