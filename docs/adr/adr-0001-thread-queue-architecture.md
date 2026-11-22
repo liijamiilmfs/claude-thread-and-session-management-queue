@@ -291,7 +291,7 @@ The board is a page, `board/index.html`, that holds markup and styles only, and 
 
 | File | Role | What lives there | May import |
 |---|---|---|---|
-| `board/main.ts` | Composition Root | The startup file, and the only place that builds the board's parts and hands each one what it works with (policy 5.13 and 9). It opens the Connector, builds the Manager from it, builds the Service from the Manager, the Transformer's function and the clock, and hands the Client the Service and nothing else. With no page database it hands the Client no Service, and the Client says the list cannot be reached | Connector, Manager, Service, Transformer, Client |
+| `board/main.ts` | Composition Root | The startup file, and the only place that builds the board's parts and hands each one what it works with (policy 9). It opens the Connector first, which asks the page for its database (see OPEN-019), builds the Manager from it, builds the Service from the Manager, the Transformer's function and the clock, and hands the Client the Service and nothing else. With no page database it hands the Client no Service, and the Client says the list cannot be reached | Connector, Manager, Service, Transformer, Client |
 | `board/client.ts` | Client | Rendering only: the rows, the click and key handlers, the status text. The only file that touches the document. It is handed the Service by `board/main.ts`, so it imports types only | Service, Model |
 | `board/service.ts` | Service | Every board rule: newest row per thread, the Priority rule, day grouping, which rows are past 60 days, the delete budget and the counts (IMP-005). On each update it takes the stored rows from the Manager, tells the Manager which rows to delete, and hands the Client a finished view to render | Manager, Model |
 | `board/manager.ts` | Manager | The Service's only way to the stored rows: watch the rows, mark one seen, remove expired ones. It hands each to the Connector | Connector, Model |
@@ -326,13 +326,13 @@ Dependencies used. All are inside the policy's allow-list (6.1). Two earlier tex
 | Composition Root | Any role, for startup wiring only |
 | Controller | Service, Model |
 | Client | Service, Model |
-| Service | Manager, Gateway, Model |
+| Service | Manager, Gateway, Transformer, Model |
 | Manager | Connector, Model |
 | Gateway | Connector, Model |
 | Connector | Model |
 | Transformer | Model |
 
-The time and the thread id are read in `hooks/register.ts` and passed into `hooks/row.ts` as plain values, so the Service reads no clock and no environment. On the board, `board/main.ts` hands the Service the clock, so `board/service.ts` reads none (Section 6).
+The time and the thread id are read in `hooks/register.ts` and passed into `hooks/row.ts` as plain values, so the Service reads no clock and no environment. On the board, `board/main.ts` hands the Service the clock, so `board/service.ts` reads none (Section 6). The board's Service also uses the Transformer: its function is handed in by `board/main.ts`, not imported.
 
 ### 6. External facility mappings
 
@@ -433,6 +433,7 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 - **OPEN-014**: Settled 2026-11-22 by the planning thread, as this point asked, in the safety design (REF-011, section 11, A7). The let-through for Claude's own ids matches the whole id, in the exact length real ids of that kind have, so a key glued to `session_` is hidden. When more than one `check` value applies, the first in this order wins: `bare`, `hidden`, `hidden-ai`, `hidden-noai`, `ok`. A look skipped near turn end (R7) hides the text and gives `hidden-noai`.
 - **OPEN-017**: Settled 2026-11-22 (CTX-050), both halves. At 12:43Z Josh chose (a): "Add helper." The board has `board/manager.ts`, role Manager, and its road is Client, Service, Manager, Connector. At 12:52Z, on a startup file: "Yeah, we should definitely." The board has `board/main.ts`, role Composition Root (policy Section 9). Both are merged in pull request 9. See Section 5.
 - **OPEN-018** (found while writing `RUL-3206`, for the planning thread): in what shape the Gateway hands its answers to the Service. This record keeps the rules that read the lookup's answer and the model's answer in `hooks/row.ts`, and only the Service calls them (Section 5). The policy says a Gateway hands up the application's own shapes, not the outside system's (5.5). The two fit if the Gateway's answer is already a plain application shape, or if the reading moves. Neither is decided here. It must be settled before any Gateway code. If the answer changes who may call `hooks/row.ts`, it needs Josh's yes.
+- **OPEN-019** (found in review of `RUL-3206`, for the planning thread): the startup file asks for the database before it wires the parts. `board/main.ts` waits for `openBoard()`, which calls `claude.use('db')`, and the answer decides the wiring: no database, no Service. Policy 5.13 says a Composition Root does no external I/O beyond the framework's own startup setup, and that remote calls at startup run after the parts are built. Calling the board's own Connector is allowed (policy Section 7). Whether `claude.use('db')` counts as framework setup or as a call to the host is not shown either way. So this record does not say 5.13 is met. A fix would be a code change, with its own issue and Josh's yes.
 
 ## Alternatives Considered
 
@@ -514,12 +515,12 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 - **IMP-004**: Install: remove any older Thread Queue plugin (`thread-queue-turnstile`), then upload the `thread-queue` zip on the account Plugins page. Two Thread Queue plugins at once spoil the proof and bring the gate back.
 - **IMP-005**: The board removes rows older than 60 days (Josh, CTX-042). Only rows in the board's own database are ever deleted, never anything in a thread. Its database holds at most 25,000 rows. The board shows how much of that is in use, and Josh checks it after 30 days.
   - The delete and clock rules, as built in `board/service.ts` and merged in pull request 9. Josh asked for them to be written here (CTX-052).
-  - **Age from the earlier clock.** A row's age is counted back 60 days from the earlier of two times: the device's clock, and the newest time on any row. So a device clock that runs ahead cannot make rows look old, and a board nobody wrote to for months deletes nothing. If no row has a time that can be read, the device's clock is used, and then the next rule leaves nothing to delete.
+  - **Age from the earlier clock.** A row's age is counted back 60 days from the earlier of two times: the device's clock, and the newest time on any row. So a device clock that runs ahead cannot make rows look old, and a long quiet spell does not age rows: only a row more than 60 days older than the newest row can be deleted. If no row has a time that can be read, the device's clock is used, and then the next rule leaves nothing to delete.
   - **No delete without a readable time.** A row whose time cannot be read is never deleted. As built, it is not shown in the list either, and it still counts in the storage figure. The board follow-up (IMP-002) gives odd rows a group of their own.
-  - **At most 200 deletes per page load.** The Service keeps a budget of 200 for the life of the page, across every update. Each row id it hands over for delete comes off the budget, whether or not the delete works. So one page load can remove at most 200 rows. A reload starts a new budget.
+  - **At most 200 deletes per page load.** The Service keeps a budget of 200 for the life of the page, across every update. Each row id it hands over for delete comes off the budget, whether or not the delete works. An id handed over again on a later update, because its delete is still running or failed, comes off the budget again. So one page load can remove at most 200 rows, and it can be fewer. A reload starts a new budget.
   - A row past 60 days leaves the list at once, even when its delete has to wait for a later page load.
   - **Only the age rule clears a row for delete.** The ids travel as the checked type `ExpiredIds` (Section 5).
-  - **One at a time, board rows only.** The Connector deletes one row at a time, each at `turns/` plus its id, and skips an id it is already deleting or has deleted in this page load. A delete that failed may be tried again on a later update.
+  - **One at a time, board rows only.** The Connector deletes one row at a time, each at `turns/` plus its id, and skips an id it is already deleting or has deleted in this page load. A delete that failed may be tried again on a later update while budget is left, or on the next page load.
   - **Who reads the clock.** `board/main.ts` hands the clock to the Service. The Service reads no clock of its own (Section 6).
   - Tests for each rule are in `board/service.test.ts`, `board/layers.test.ts` and `board/manager.test.ts`.
 - **IMP-006**: Work is assigned under the Agent Routing and Capacity Contract v0.9. Josh approves each issue and its tier before work starts. Agents do not merge pull requests. A Haiku worker makes all Linear writes from an exact spec. Any change to what the module may call (Section 6) is a Specialist trigger.
