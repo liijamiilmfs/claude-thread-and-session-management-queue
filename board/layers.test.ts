@@ -81,33 +81,33 @@ test('no shipped file is missing from the allow-list', () => {
 // Saving the seen mark: a refused save is retried with waits, then reported.
 function seenService(failures: number) {
   const waits: number[] = [];
-  let tries = 0, failed = 0;
+  let tries = 0, failed = 0, saved = 0;
   const retryWaits = () => waits.filter(ms => ms !== OPEN_PATIENCE_MS); // the patience wait is a separate timer
   const manager: Manager = {
     watchRows: () => {}, removeRows: async () => {},
     markRowSeen: async () => { tries++; if (tries <= failures) throw new Error('refused'); },
   };
   const service = createService({ manager, toDisplay, now: () => NOW, wait: async ms => { waits.push(ms); } });
-  const run = async () => { void service.markSeen('a', () => { failed++; }); await new Promise(r => setImmediate(r)); };
-  return { run, get waits() { return retryWaits(); }, get tries() { return tries; }, get failed() { return failed; } };
+  const run = async () => { void service.markSeen('a', ok => { if (ok) saved++; else failed++; }); await new Promise(r => setImmediate(r)); };
+  return { run, get waits() { return retryWaits(); }, get tries() { return tries; }, get failed() { return failed; }, get saved() { return saved; } };
 }
 
 test('a seen save that works first time makes one try and no note', async () => {
   const s = seenService(0);
   await s.run();
-  assert.deepEqual([s.tries, s.waits, s.failed], [1, [], 0]);
+  assert.deepEqual([s.tries, s.waits, s.failed, s.saved], [1, [], 0, 1]);
 });
 
 test('a refused seen save is tried again after 1, 2 and 5 seconds and then works', async () => {
   const s = seenService(3);
   await s.run();
-  assert.deepEqual([s.tries, s.waits, s.failed], [4, [1000, 2000, 5000], 0]);
+  assert.deepEqual([s.tries, s.waits, s.failed, s.saved], [4, [1000, 2000, 5000], 0, 1]);
 });
 
 test('a seen save that keeps failing stops after four tries and reports once', async () => {
   const s = seenService(99);
   await s.run();
-  assert.deepEqual([s.tries, s.waits, s.failed], [4, [1000, 2000, 5000], 1]);
+  assert.deepEqual([s.tries, s.waits, s.failed, s.saved], [4, [1000, 2000, 5000], 1, 0]);
 });
 
 test('opening waits for the save when it is quick, and gives up waiting after the patience limit when it hangs', async () => {

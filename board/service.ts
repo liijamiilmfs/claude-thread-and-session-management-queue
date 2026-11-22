@@ -63,8 +63,9 @@ export function groups(rows: DisplayRow[], now: number): Group[] {
 
 export type Service = {
   watch(onView: (view: View) => void, onError: (code: string) => void): void;
-  // Saves the mark, retries, then calls onFailed. The promise ends when the save works or after OPEN_PATIENCE_MS, whichever is first.
-  markSeen(docId: string, onFailed: () => void): Promise<void>;
+  // Saves the mark and retries. Calls onResult(true) when it is saved, or onResult(false) once after the last try fails.
+  // The promise ends when the save works or after OPEN_PATIENCE_MS, whichever is first.
+  markSeen(docId: string, onResult: (saved: boolean) => void): Promise<void>;
 };
 
 export const OPEN_PATIENCE_MS = 800; // how long opening a thread waits for the save
@@ -88,11 +89,11 @@ export function createService({ manager, toDisplay, now, wait }: Deps): Service 
         onView({ groups: shown, threads: rows.length, waiting: rows.filter(isPriority).length, stored: all.length, limit: ROW_LIMIT });
       }, onError);
     },
-    markSeen(docId, onFailed) {
+    markSeen(docId, onResult) {
       const saved = (async () => {
         for (let i = 0; ; i++) {
-          try { await manager.markRowSeen(docId); return; } catch {
-            if (i >= SEEN_RETRY_DELAYS.length) { onFailed(); return; }
+          try { await manager.markRowSeen(docId); onResult(true); return; } catch {
+            if (i >= SEEN_RETRY_DELAYS.length) { onResult(false); return; }
             await wait(SEEN_RETRY_DELAYS[i]);
           }
         }

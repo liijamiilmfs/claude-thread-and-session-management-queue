@@ -22,12 +22,12 @@ function openLink(url: string): void {
   t.remove();
 }
 
-function rowNode(r: DisplayRow, service: Service, onFailed: () => void): HTMLElement {
+function rowNode(r: DisplayRow, service: Service, onResult: (saved: boolean) => void): HTMLElement {
   const a = el('a', 'row') as HTMLAnchorElement;
   if (r.link) { a.href = r.link; a.target = '_blank'; a.rel = 'noopener'; }
   // The mark is saved only on a finished activation (click, or Enter and Space on a row with no link), once per row.
   let saving: Promise<void> | null = null;
-  const markOnce = (): Promise<void> => saving ??= service.markSeen(r.docId, onFailed);
+  const markOnce = (): Promise<void> => saving ??= service.markSeen(r.docId, onResult);
   a.addEventListener('click', e => {
     if (!r.link || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) { void markOnce(); return; }
     // Wait briefly for the save, then open the thread. Inside the Claude app a click can leave the page before the save is sent.
@@ -53,14 +53,16 @@ export function startClient({ service }: Deps): void {
   const notice = el('p', 'muted');
   notice.setAttribute('role', 'alert');
   status.after(notice);
-  const onFailed = () => { notice.textContent = 'Could not save that you opened a thread. It may show as unread again. Reload the page and try again.'; };
+  const onResult = (saved: boolean) => { // a later save that works clears the note: a row that failed is still unread, so nothing is hidden
+    notice.textContent = saved ? '' : 'Could not save that you opened a thread. It may show as unread again. Reload the page and try again.';
+  };
   if (!service) { status.textContent = 'This view cannot reach the list. Open the page inside Claude, signed in.'; return; }
   const slow = setTimeout(() => { status.textContent = 'The list cannot be reached yet. Still trying.'; }, 10000);
   service.watch((v: View) => {
     clearTimeout(slow);
     box.replaceChildren(...v.groups.map(g => {
       const section = el('div', 'day');
-      section.append(el('h2', '', g.label), ...g.rows.map(r => rowNode(r, service, onFailed)));
+      section.append(el('h2', '', g.label), ...g.rows.map(r => rowNode(r, service, onResult)));
       return section;
     }));
     const stored = `${v.stored.toLocaleString()} of ${v.limit.toLocaleString()} stored rows used.`;
