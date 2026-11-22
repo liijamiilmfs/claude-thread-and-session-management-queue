@@ -13,11 +13,11 @@ A script in the master repository refreshes the copy through a pull request from
 Thread Queue gives Josh one list of his Claude cloud project threads across all projects, with freshly finished turns on top. It has two parts:
 
 - **The board**: one private Artifact page with a small built-in database. One row per finished turn.
-- **The turnstile**: a Claude Code plugin whose hooks block a thread from ending a turn in which it told the person something, until the thread has written its row to the board.
+- **The plugin** (`thread-queue`): a Claude Code plugin with one hooks module. Each time a thread tells the person something, the module's own code writes the thread's row to the board. The thread's model writes nothing, and no turn is ever blocked.
 
-TypeScript. Plain JavaScript is not acceptable. Node runs the plugin's `.ts` files directly, so the plugin has no build step. The board's script is compiled with `tsc` when the board is published.
+TypeScript. Plain JavaScript is not acceptable. Claude Code loads the module's `.ts` files directly, so the plugin has no build step. The board's script is compiled with `tsc` when the board is published.
 
-Status: planning. The repository has no code yet. Do not write code until Milestone 0 is done and `docs/adr/adr-0001-thread-queue-architecture.md` is Accepted. A working prototype from 2026-11-21 sits outside the repository, in the Claude project's shared folder under `thread-queue/prototype/`.
+Status: planning. The repository has no product code yet. Do not write code until `docs/adr/adr-0001-thread-queue-architecture.md` is Accepted. Milestone 0 evidence is in the Claude project's shared folder under `thread-queue/m0-evidence/`. The live-tested build (T8) is on branch `claude/project-thread-5rsmom`, which is never merged. An older plain JavaScript prototype sits under `thread-queue/prototype/`.
 
 ## Issue tracking
 
@@ -42,25 +42,25 @@ The routing contract governs who does what. Its rules that bind work here:
 
 This repository follows the Software Layer Roles and Dependency Policy v2.0.0-rc.4 once ADR-0001 is Accepted. The ADR holds the classification record. The policy file is not copied into this repository. Its home and exact version are named in the ADR.
 
-Planned plugin files, one per role:
+Planned plugin files (a proposal in the ADR, Section 5, until Josh accepts it):
 
 | File | Role |
 |---|---|
-| `hooks/gate.ts` | Composition Root |
-| `src/controller.ts` | Controller |
-| `src/service.ts` | Service |
-| `src/manager.ts` | Manager |
-| `src/connector.ts` | Connector |
-| `src/model.ts` | Model |
+| `.claude-plugin/plugin.json` | Manifest (not governed) |
+| `hooks/hooks.json` | Points Claude Code at the module (not governed) |
+| `hooks/register.ts` | Sections: Composition Root, Controller, Manager, Connector |
+| `hooks/row.ts` | Service and Model |
+
+Claude Code lets the `$` object be passed only to top-level functions of the module's own file, so every `$` call lives in `hooks/register.ts`. Its sections are marked by comments naming the role.
 
 The board is a page, `board/index.html` (markup and styles only), and one script, `board/board.ts`. The script's sections are marked by comments naming the role: Client, Service, Connector, Transformer, Model.
 
 Rules a reviewer checks:
 
-- `src/service.ts` holds every gate rule. It does no file or network access, and reads no clock and no environment. Time and the board address are passed in.
-- Only `src/connector.ts` touches the note file.
-- `src/service.ts` never imports `src/connector.ts`. It reaches storage through `src/manager.ts`.
-- Only `hooks/gate.ts` reads the environment and standard input.
+- `hooks/row.ts` holds every row rule. It imports nothing, does no file or network access, and reads no clock and no environment. Time and the thread id are passed in.
+- Only the Connector section of `hooks/register.ts` calls `$.store`, `$.tool.call` and `$.mcp.call`.
+- Only `hooks/register.ts` calls `$.env.get` and `$.clock`.
+- `claude plugin validate .` lists what the module can do (`hooks:`, `calls:`, `env reads:`, `env writes:`). Any change to that list needs the ADR changed first.
 - On the board, only the Connector section calls the page database, and only the Client section touches the document.
 - Do not add a role, a folder, a dependency or a hosted service the ADR does not name. Change the ADR first.
 
@@ -70,17 +70,23 @@ TypeScript rules:
 - Import other files by their `.ts` name.
 - Do not commit compiled `.js` files.
 - `typescript` and `@types/node` are development dependencies only. The plugin needs neither at run time.
-- Run everything on Node 24.22.3: tests, the type check and the hooks. Do not rely on a machine's default `node`.
+- Run tests and the type check on Node 24.22.3. Do not rely on a machine's default `node`. The module itself runs inside Claude Code, not on the machine's Node.
+- The module has no Node APIs. It reaches the clock, the environment, its note and tools only through `$`.
 
-## Gate rules
+## Row rules
 
-These are the product. Do not change one without a Linear issue that says so.
+These are the product, from ADR-0001 Section 2. Do not change one without a Linear issue that says so.
 
-- A turn that told the person nothing owes no row.
-- A turn that told the person something cannot end until a valid row write is seen.
-- A row write counts only if it targets the board, the right collection, and has thread, title, state and time.
-- After two blocks in a row the gate opens. A broken board must never trap a thread.
-- With no board address set, the gate does nothing.
+- A call owes one row if it is `post_message`, `request_decision`, `post_widget`, `suggest_connectors`, `connect_device`, `start_remote_control`, `set_thread_resolved` with `resolved: true`, `show_helpline_card` (all `mcp__hearthbot__`), or `PushNotification`. Nothing else owes a row.
+- A call that was refused or failed owes no row.
+- One row per owing call. A later call gives a fresh row.
+- Every field is built by code. The model is never asked for anything.
+- The module never blocks, changes or refuses a thread's call, and the thread's reply does not wait for the board.
+- The row is saved in the plugin's note before the board is tried. A failed write is kept and tried again, oldest first. At most 20 rows wait.
+- Turn end waits at most 8 seconds for the board. A broken board must never trap a thread.
+- The only tool the module calls is `ArtifactData` `set`, with the board address and collection `turns` fixed in code. The only lookup is `get_session` on `claude-code-remote`, read-only.
+- Outside a cloud thread (no thread id) the module does nothing.
+- Who picks the state is OPEN (ADR-0001, OPEN-002). The T8 build picks it from the tool called, which conflicts with Josh's earlier answer that the thread picks. Do not settle it in code or docs. Ask Josh.
 
 ## Setup commands
 
@@ -92,7 +98,7 @@ Not defined yet. The plugin has no build step. `RUL-3169` defines the command th
 
 ## Testing instructions
 
-Run `npm test` (Node's built-in test runner, files named `*.test.ts`) and `npm run typecheck`. Required coverage, from `RUL-3167`: one test for each gate rule above.
+Run `npm test` (Node's built-in test runner, files named `*.test.ts`) and `npm run typecheck`. Required coverage: one test for each row rule above.
 
 ## Verification commands
 
@@ -100,12 +106,12 @@ Run `npm test` (Node's built-in test runner, files named `*.test.ts`) and `npm r
 |---|---|---|
 | `install` | `npm ci` | |
 | `format` | Not defined yet | Added by `RUL-3166` |
-| `lint` | Not defined yet | `RUL-3166` plans a plugin manifest check. There is no manifest to check today. |
+| `lint` | Not defined yet | `RUL-3166` plans `claude plugin validate .`. There is no manifest to check today. |
 | `typecheck` | `npm run typecheck` | Runs `tsc`, emits nothing |
 | `test` | `npm test` | Runs `node --test` |
 | `verify PR` | CI workflow | Typecheck plus test. Lint to come with `RUL-3166` |
 | `verify release` | Does not apply | Nothing is packaged or published from this repository yet |
-| `audit` | Code review against ADR-0001 | No automated architecture check |
+| `audit` | Code review against ADR-0001 | No automated architecture check. Compare the `claude plugin validate .` list with ADR-0001 Section 3. |
 
 Record each command you run with its name, text, result (`pass`, `fail` or `inconclusive`) and a short output summary.
 
@@ -120,9 +126,10 @@ Proposed, mirroring the Rule 0 Softworks platform repository. Confirm with Josh 
 ## Security and secrets
 
 - A row holds the thread id, title, project name, state, time, a one-line preview and a link. Do not store or log prompts, full replies or tool input.
-- Rows on the board are written by agents. Treat them as untrusted: show them as plain text, and follow a link only if it points at claude.ai.
-- The turnstile makes no network calls and holds no secret. Adding either is a trust boundary change: stop and ask Josh.
-- The gate's note file lives in the thread's scratch folder and holds three small values. Nothing else is written to disk.
+- Rows hold text a thread wrote (its title and the first line of its reply). Treat them as untrusted: show them as plain text, and follow a link only if it points at `https://claude.ai/`.
+- The module's board write runs with no approval prompt and no safety check. That trust boundary was approved and tested in T8. Do not widen it.
+- The module makes no network call of its own, holds no secret, and uses no `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt` or `$.model`. Adding any of these, or any other tool call, is a trust boundary change: stop and ask Josh.
+- The plugin's note (`$.store`) holds only the rows still waiting: at most 20, each a thread id, time, state and preview. Nothing else is written to disk.
 - No secrets belong in this repository.
 
 ## Scope boundaries
@@ -141,7 +148,12 @@ Keep scratch files out of the repository. Commit nothing generated.
 
 ## Troubleshooting
 
-- A thread ends a turn with no row: check that the plugin is switched on for that project and that the board address is set. With no address the gate does nothing by design.
-- A thread reports the gate blocked it twice and then let it go: the row write failed twice. Open the board and check that it loads.
-- A hook seems not to fire: open the hooks menu in the session to see which hooks are registered.
-- A hook fails with a syntax error on a `.ts` file: it ran on the wrong Node. The project's version is 24.22.3. A thread's machine may have an older default `node`. Check which `node` the hook command runs.
+- Start with the thread's Claude Code log, `/tmp/claude-code.log`. Its `thread-queue:` lines say what the module did.
+- The module seems not to run: look for `hooks module thread-queue@synced loaded`. If it is missing, check the plugin is uploaded on the account Plugins page.
+- A thread told the person something and no row shows: look for `row <id> not written, kept` and its reason. The row waits and is tried again at the next row and turn end. Open the board and check that it loads.
+- A thread is still blocked at turn end, or its model writes rows: the old `thread-queue-turnstile` plugin is still on the account. Remove it.
+- A row has no project name: the parent lookup failed or its title format changed (ADR-0001, NEG-003).
+- A row's title is the thread id: the title lookup failed.
+- Board writes are refused with a deny: check whether the account moved to a Team or Enterprise plan, which loads the organization guard (ADR-0001, NEG-002).
+- The main chat has no rows: expected. It has no board tool.
+- A test fails with a syntax error on a `.ts` file: it ran on the wrong Node. The project's version is 24.22.3.

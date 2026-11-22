@@ -1,53 +1,66 @@
 ---
-title: "ADR-0001: Thread Queue turnstile and board, and software layers adoption"
+title: "ADR-0001: Thread Queue board and row-saving plugin, and software layers adoption"
 status: "Proposed"
-date: "2026-11-21"
+date: "2026-11-22"
 authors: "Josh (adoption owner and approver)"
 tags: ["architecture", "decision", "scope-adoption", "claude-code-plugin"]
 supersedes: ""
 superseded_by: ""
 ---
 
-# ADR-0001: Thread Queue turnstile and board, and software layers adoption
+# ADR-0001: Thread Queue board and row-saving plugin, and software layers adoption
 
 ## Status
 
 **Proposed** | Accepted | Rejected | Superseded | Deprecated
 
-This record stays Proposed until the Milestone 0 tests are done and Josh approves it. The software layers policy is not Active for this repository until then.
+This record stays Proposed until Josh marks it Accepted. The software layers policy is not Active for this repository until then.
 
-An earlier draft of this record described a pane inside the desktop app for local sessions. Josh dropped that scope on 2026-11-21 before the draft was approved, so this text replaces it and nothing is superseded.
+Earlier drafts described a pane inside the desktop app (dropped by Josh on 2026-11-21) and then a turnstile that blocked a thread until its model wrote the row (replaced on 2026-11-22 after Milestone 0, see "Alternatives Considered"). No draft was approved, so this text replaces them and nothing is superseded.
+
+Milestone 0 evidence lives outside the repository, in the Claude project's shared folder under `thread-queue/m0-evidence/` (`T1.md` to `T8.md`). Each fact below names its report.
 
 ## Context
 
 Josh runs three to five Claude projects at once. Each project's threads run in the cloud. To see which threads have finished a turn he must open each project and then its thread list. He wants one list across all projects, in the style of the Codex sidebar, with freshly finished turns on top.
 
-Facts from Anthropic's Claude Code documentation, read on 2026-11-21:
+### Facts from Anthropic's documentation
 
 - **CTX-001**: Hooks fire in cloud sessions. "Claude Code fires the same hook events wherever it runs: sessions in the terminal, IDE extensions, the Desktop app, and cloud sessions."
-- **CTX-002**: A hook on Josh's computer cannot see cloud threads. "Cloud sessions don't read your local `~/.claude/settings.json`." "Cloud threads don't pick up anything from the Claude Code setup on your own machine." Hooks in a repository's settings file are "not run" in a project thread.
-- **CTX-003**: A plugin carries hooks. "Define plugin hooks in `hooks/hooks.json`." "When a plugin is enabled, its hooks merge with your user and project hooks." Plugins reach project threads through the project's plugin settings.
-- **CTX-004**: A Stop hook can refuse to let a turn end. A `decision` of `"block"` with a `reason` "prevents Claude from stopping, continues the conversation".
+- **CTX-002**: A hook on Josh's computer cannot see cloud threads. "Cloud sessions don't read your local `~/.claude/settings.json`." Hooks in a repository's settings file are "not run" in a project thread.
+- **CTX-003**: Corrected by Milestone 0. The docs say plugins reach threads through **Project settings > Plugins**. Josh's account has no such section (T1). See CTX-019.
+- **CTX-004**: A Stop hook can refuse to let a turn end. No longer used by this design.
 - **CTX-005**: No documented interface lists project threads across projects.
+- **CTX-030**: A plugin can carry a hooks module (`hooks/hooks.json`, key `"modules"`), which may be a `.ts` file. A cloud session runs a module's hooks "for a plugin that reaches the cloud session" (mods overview, "Where mods run"). The module "has no Node.js APIs" and no file or network access of its own. It reaches those only through the `$` object Claude Code hands it (mods API).
+- **CTX-031**: A module can call a tool itself with `$.tool.call`. Anthropic's type file (`mods/types/claude-code.d.ts`): it is "the same call the engine makes for the model's tool calls", and "The check opens no dialog and asks no classifier: every ask becomes an allow, whoever raised it". Mods admin page: such calls "can skip permission rules, permission prompts, a hook's `ask`, and the auto mode classifier."
+- **CTX-032**: The one documented blocker for CTX-031: "Where sec-default is seated, a person's mod is answered `{ deny }` until that call is allowed." That organization guard loads with managed settings or a Team or Enterprise login.
+- **CTX-033**: Module events used: `tool.call` (a tool is about to run), `turn.complete` (a turn ended) and `tool.judge` (auto mode is about to ask its safety check, Claude Code 2.1.326 or later). A hook has 10 seconds of its own time, "not counting time inside `next` or a mods API call". A hook that fails after `next` resolved: "that result stands, and nothing runs a second time".
+- **CTX-034**: After Josh stops a thread, Claude Code refuses a module's calls until his next message ("the session was stopped and nobody has sent input since").
 
-Facts observed in one cloud project thread on 2026-11-21. These are test results, not documented promises:
+### Facts seen in Milestone 0 (test results, not documented promises)
 
-- **CTX-006**: Hooks placed in the thread machine's own user settings file loaded without a restart. A PostToolUse hook and a Stop hook both fired.
-- **CTX-007**: A Stop hook blocked the end of a turn, and the thread carried on, did what the hook asked, and then ended normally. The platform's own reply check, which is also a Stop hook, kept working beside it.
-- **CTX-008**: The Stop hook was told the session id, the transcript path, the folder, a scratch folder and little else. It was not told the thread's title, its project, or the reply text.
-- **CTX-009**: A hook that calls a connector tool directly, with no agent step, worked against the Linear connector.
-- **CTX-010**: A private Artifact page with a built-in database showed rows live. A thread wrote a row to it with the `ArtifactData` tool and no approval prompt, in auto permission mode.
-- **CTX-011**: The same page could not list sessions itself. Claude's permission box reported "Couldn't load this connector" for the built-in session connector.
-- **CTX-012**: An account plugin's hooks (Ponytail) ran in the thread.
-- **CTX-017**: The thread's machine had Node v24.22.3 at `/opt/node24/bin/node`. Run with it, a `.ts` file that imports another `.ts` file ran directly, with no flag and no build step, and Node reported `process.features.typescript` as `strip`. The machine's default `node` command was an older version, which this project does not use.
+- **CTX-006 to CTX-012, CTX-017**: The prototype checks of 2026-11-21. Hooks in a thread machine's own settings file loaded and fired. A Stop hook blocked a turn. The Stop input carries no title, project or reply text (CTX-008). A private Artifact page with a built-in database showed rows live, and a thread wrote a row with the `ArtifactData` tool (CTX-010). The page could not load the session connector itself (CTX-011). An account plugin's hooks (Ponytail) ran in a thread (CTX-012). Node v24.22.3 sat at `/opt/node24/bin/node` and ran `.ts` files directly (CTX-017).
+- **CTX-019**: There is no per-project plugin switch on Josh's account. A plugin arrives by uploading a `.zip` on the account Plugins page. It is account-wide: every project, each project's main chat, and running threads when they wake (T1, T4).
+- **CTX-020**: Plugin option values (`userConfig`) do not reach cloud threads (T1). So the board's address is fixed in the plugin's code.
+- **CTX-021**: When a thread's model wrote the row, the server-side safety check judged each write on its own. Of five writes from other projects, one was refused ("[Sensitive Information Leakage]") and four passed. The rate is unknown, and nothing documented lets one account switch the check off for cloud threads (T1, T6).
+- **CTX-022**: The main chat runs account plugin hooks but has no `ArtifactData` tool, so it cannot write a row (T1, T4). A test page could find the session connector but could not read the main chat (T4, two tries).
+- **CTX-023**: The organization guard is not loaded in Josh's cloud threads. Log: `cc-plugin-sec-default@builtin not seated: no managed settings and not a Team or Enterprise organization (max)` (T7).
+- **CTX-024**: A hooks module in an uploaded zip loads in a cloud thread and can call `ArtifactData` itself. Log lines from the T8 thread: `hooks module thread-queue@synced loaded`, `Skipping auto mode classifier for ArtifactData: called by plugin thread-queue`, and `tool_dispatch_start tool=ArtifactData toolUseId=toolu_plugin_...` with `outcome=ok` (T8). Claude Code was 2.1.330.
+- **CTX-025**: The built-in `claude-code-remote` connector's `get_session`, called by the module with no id, returns the thread's title and its parent's id. The parent is the project's main chat, whose title reads `Project coordinator ("<project name>")`. That format is not documented. The parent's record comes back wrapped in a notice around the JSON (T8).
+- **CTX-026**: Claude Code can restart on the same cloud machine when a thread wakes after a long idle. Module memory is lost. The module's own `$.store` note survives while the machine lives (T8).
+- **CTX-027**: A board row's link, `https://claude.ai/code/session_<thread id>`, opened the right thread from Josh's phone browser and from the Windows Claude desktop app (T3).
+- **CTX-028**: In auto mode, threads on Haiku 5.5, Fable 5.2, Sonnet 5.5 and Opus 5.5 showed Josh no approval box for a model-written row (T2). That was the old path. Under this design the plugin's call opens no dialog (CTX-031). T2 stays open until rows from all four models are seen on this design.
 
-Josh's decisions on 2026-11-21:
+### Josh's decisions
 
 - **CTX-013**: Cloud project threads only. The desktop app already sorts local sessions by status.
 - **CTX-014**: Reporting must be enforced by code. An instruction that asks threads to report is not acceptable, because agents skip instructions.
-- **CTX-015**: The turnstile design below, chosen over continued search for a route with no agent step.
+- **CTX-015**: The turnstile was chosen on 2026-11-21 and replaced on 2026-11-22. See CTX-035 and CTX-036.
 - **CTX-016**: The code is TypeScript. Plain JavaScript is not acceptable.
-- **CTX-018**: The project's Node version is 24.22.3, the version Josh runs locally. `.nvmrc` says 24.22.3 and `package.json` requires 24.22.3 or newer. Tests and hooks run on that version, not on whatever a machine has by default.
+- **CTX-018**: The project's Node version is 24.22.3. `.nvmrc` says 24.22.3 and `package.json` requires 24.22.3 or newer. Tests and the type check run on that version.
+- **CTX-029**: Which calls owe a row and what the four states mean: the T4 table, as Josh agreed on 2026-11-21 (answers q1 to q8). q6 is the exception, see OPEN-002.
+- **CTX-035**: No row may ever go missing (2026-11-22 00:09Z): "A row going missing is not ok, that nondeterminism is a flaw I can't accept for a tool that I rely on consistently."
+- **CTX-036**: Josh said no to a plugin rule that approves the model's board write (T7, 2026-11-22 01:43Z), and chose instead to have "the plugin do the save itself" (01:42Z). He approved the T8 build and live test.
 
 Rule 0 Softworks requires each repository to adopt the Software Layer Roles and Dependency Policy through a scope-adoption ADR. This record is that ADR for this repository.
 
@@ -57,65 +70,92 @@ Rule 0 Softworks requires each repository to adopt the Software Layer Roles and 
 
 Two parts.
 
-**The board** is one private Artifact page, pinned in Claude. It keeps a small database of rows, one per finished turn. It shows the newest row of each thread: Priority on top (finished turns Josh has not clicked), then the rest grouped by day. Each row shows the thread title, project name, state and a short preview, and links to the thread. Clicking a row marks it seen.
+**The board** is one private Artifact page, pinned in Claude. It keeps a small database of rows. It shows the newest row of each thread: Priority on top (rows Josh has not clicked), then the rest grouped by day. Each row shows the thread title, project name, state and a short preview, and links to the thread. Clicking a row marks it seen. Address: `https://claude.ai/artifact/ByotUv4ViCSyFxtHF5cbNG`, collection `turns`.
 
-**The turnstile** is a plugin with two command hooks that run one small TypeScript program on Node.
+**The plugin** is a Claude Code plugin, `thread-queue`, with one hooks module. Think of a clerk standing next to the thread's outbox. Each time the thread sends Josh something, the clerk writes one line in the board's log book. The clerk never touches the message and never stops it.
 
-- After each tool call, the script notes two things in a small file in the thread's scratch folder: the thread told the person something (a row is owed), and a valid row was written.
-- When the thread tries to end its turn, the script checks the note. If a row is owed and not written, it blocks the turn and hands back the exact row to write, with the thread id, time and link filled in. The thread adds its title, project, state and preview, writes the row, and the turn ends.
+1. The module listens to the calls that tell Josh something (rule R1).
+2. It lets each call through unchanged and hands the answer back unchanged.
+3. If the call worked, it builds the row in code and saves it in the plugin's own note.
+4. It writes the row to the board with its own `ArtifactData` call. The thread's reply does not wait for this.
+5. At the end of the turn it waits up to 8 seconds for writes still in flight, and tries again any that failed.
+6. A row that could not be written stays in the note and is tried again at the next row and the next turn end.
 
-Rules:
+The thread's model writes nothing and is asked for nothing. There is no gate and nothing blocks a turn.
 
-- A turn that told the person nothing owes no row.
-- A row write counts only if it targets the board, the right collection, and carries thread, title, state and time.
-- After two blocks in a row the gate opens, so a broken board cannot trap a thread.
-- With no board address set, the script does nothing.
-- States are needs you, ready for review, finished and failed.
+### 2. Row rules
 
-Language: TypeScript (CTX-016).
+These are the product.
 
-- The plugin's `.ts` files are run directly by Node 24.22.3 (CTX-018), which removes the types as it loads each file (CTX-017). The plugin has no build step and no compiled files are committed.
-- Because Node only removes types, the plugin uses only TypeScript syntax that can be removed: no enums, no namespaces and no parameter properties. Imports name the `.ts` file.
-- `tsc`, set to emit nothing, is the type check (`npm run typecheck`). Tests run on Node's built-in test runner (`npm test`). `typescript` and `@types/node` are development dependencies only. The plugin needs neither at run time.
-- The hooks must not run on a machine's default Node. How a hook reaches Node 24.22.3 on a thread's machine is settled by Milestone 0, check 1. The candidate is the path seen in CTX-017. On any other version the gate does nothing.
+- **R1**: A call owes one row if it is one of: `mcp__hearthbot__post_message`, `request_decision`, `post_widget`, `suggest_connectors`, `connect_device`, `start_remote_control`, `set_thread_resolved` with `resolved: true`, `show_helpline_card`, or `PushNotification` (T4 section 1, Josh's q1 to q3). Every other call owes nothing.
+- **R2**: A call that was refused or failed owes no row.
+- **R3**: One row per owing call. A later call gives a fresh row, and the board shows the newest per thread (Josh's q4). A turn that replies and then resolves gives two rows and ends on the resolve.
+- **R4**: Every field is built by code. Thread id from `CLAUDE_CODE_REMOTE_SESSION_ID`. Time from the clock, never the same time twice, since it is part of the row id `<thread>.<epoch ms>`. Link `https://claude.ai/code/<thread>`. Title and project from `get_session` (CTX-025). Preview: the first line with text of what was posted, cut to 200 characters, or a fixed neutral text for the connect, resolve and helpline calls. If the title lookup fails, the thread id stands in. If the project lookup fails, the row goes out with no project.
+- **R5**: The module never blocks, changes or refuses a thread's call.
+- **R6**: The row is saved in the note before the board is tried. A failed write is kept and tried again, oldest first. At most 20 rows wait. The oldest is dropped past that, and the drop is logged.
+- **R7**: Turn end waits at most 8 seconds for the board. A broken board must never trap a thread.
+- **R8**: The only tool the module calls is `ArtifactData`, action `set`, with the board address and collection fixed in code. The only lookup is `get_session` on `claude-code-remote`, read-only: once for the thread, once for its parent.
+- **R9**: Outside a cloud thread (no thread id) the module does nothing.
+- **R10, state**: OPEN, see OPEN-002. The T8 build picks the state from the tool called:
+
+| The thread did this | State in the T8 build |
+|---|---|
+| Asked on a decision card | `needs_you` |
+| Posted a card with a button, or a draft to send | `needs_you` |
+| Asked to connect an app or his computer | `needs_you` |
+| Resolved the thread | `finished` |
+| Anything else: a reply, a chart, a phone alert, a helpline card | `review` |
+
+Under this table a plain reply that asks Josh a question shows as `review`, and `failed` is never used.
+
+The four states and their meanings, in order (T4 section 2, Josh's q5): `needs_you` (the work cannot go on until Josh answers or acts), `failed` (the work cannot be done and nothing is asked), `finished` (the thread resolved itself this turn), `review` (anything else).
+
+### 3. Language and runtime
+
+- TypeScript (CTX-016). Claude Code's own loader runs the module's `.ts` files inside Claude Code (CTX-024, the log says `worker`). The plugin does not start Node on the thread's machine, so it does not depend on the machine's Node version.
+- Use only TypeScript syntax that can be removed: no enums, no namespaces and no parameter properties. Imports name the `.ts` file.
+- `tsc`, set to emit nothing, is the type check (`npm run typecheck`). Tests run on Node 24.22.3's built-in test runner (`npm test`). `typescript` and `@types/node` are development dependencies only.
+- `claude plugin validate .` prints Claude Code's own list of what the module can do (`hooks:`, `calls:`, `env reads:`, `env writes:`). The T8 list: hooks `tool.call` on the nine R1 tools, `turn.complete`, `tool.judge` on `ArtifactData`; calls `$.clock.after`, `$.clock.now`, `$.env.get`, `$.mcp.call`, `$.store.get`, `$.store.set`, `$.tool.call`, `$.tool.list`, `$.ui.log`; env reads `CLAUDE_CODE_REMOTE_SESSION_ID`; env writes nothing. Proposal: a reviewer checks that list on every change, and `RUL-3166` makes it the lint step.
 - A browser cannot run TypeScript, so the board's script is compiled with `tsc` when the board is published. The compiled file is published beside the page and is not committed.
 
-Rationale: the hook is code and runs whether or not the agent remembers, which meets CTX-014. The agent is still the only party that knows the title, project and state (CTX-008), so it fills in the label while the hook holds the gate. Nothing is hosted, no network rule changes, and no secret is stored.
+Rationale: the module is code and runs whether or not the model remembers (CTX-014). Its own call skips the safety check that refused one model-written row in five (CTX-021, CTX-024), which is what CTX-035 needs. It finds the title and project itself (CTX-025), which removes the only reason the model had a part. Nothing is hosted, no network rule changes, and no secret is stored.
 
-### 2. Software layers adoption (policy Section 2.2 fields)
+### 4. Software layers adoption (policy Section 2.2 fields)
 
 | Field | Value |
 |---|---|
 | Policy | Software Layer Roles and Dependency Policy, `R0S-ARCH-LAYERS`, version `2.0.0-rc.4` |
 | Immutable artifact identifier | File `docs/architecture/software-layers-v2.0.0-rc.4.md` in `Rule-0-Softworks/rule-0-softworks-platform` at commit `32e4c1c548d3bbef05dd66460f72536cf5253872`, SHA-256 `84f1792b0a3b583cfd0486aa5e40e31fd71e542d2d88f6bf8e88d610155b6fcd` |
 | Previously Active policy | None. This is a new repository. |
-| Governed scopes | `hooks/gate.ts`, every file under `src/`, and `board/board.ts` |
+| Governed scopes | `hooks/register.ts`, `hooks/row.ts` and `board/board.ts` |
 | Exclusions | Test files (`*.test.ts`), JSON manifests and config, and documentation |
 | Adoption owner | Josh |
 | Approval date | Pending |
-| Classification record | Section 3 of this record |
+| Classification record | Section 5 of this record |
 | Same-role compositions (6.2) | None |
 | Consumer transport Connectors (6.3) | None |
-| Persistence Connectors with Entity access (6.4) | None. Both Connectors store plain JSON and stay Entity-agnostic. |
-| External facility mappings (Section 7) | Section 4 of this record |
+| Persistence Connectors with Entity access (6.4) | None. The note and the board store plain JSON and stay Entity-agnostic. |
+| External facility mappings (Section 7) | Section 6 of this record |
 | Incorporated exception ADRs | None |
-| Enforcement | Code review |
+| Enforcement | Code review, plus the `claude plugin validate .` list in Section 3 |
 | Effective date | The approval date |
 
-### 3. Classification record
+### 5. Classification record (PROPOSAL for Josh)
 
-The plugin has one file per role. The file name is the classification rule.
+The planned six gate files no longer match: there is no gate. The T8 build has two files, and this proposal keeps them.
 
-| File | Role | What lives there |
+One limit shapes the split. Claude Code's checker lets the `$` object be passed only to top-level functions of the module's own file (T8, `claude plugin validate`). So every `$` call has to live in `hooks/register.ts`. That file is classified by section, as the board's script already is. Each section starts with a comment naming its role.
+
+| File or section | Role | What lives there |
 |---|---|---|
-| `hooks/gate.ts` | Composition Root | Reads the hook event, the board address and the time, builds the parts, runs the Controller, exits |
-| `src/controller.ts` | Controller | Turns a hook event into one call on the Service, and the answer into hook output |
-| `src/service.ts` | Service | The gate rules and the wording of the row instruction |
-| `src/manager.ts` | Manager | Load and save the gate's note |
-| `src/connector.ts` | Connector | The only code that touches the note file |
-| `src/model.ts` | Model | The shapes of a hook event, the note and a decision |
+| `hooks/register.ts`, Composition Root | Composition Root | `register()`: names the events and the nine tools, wires the handlers |
+| `hooks/register.ts`, Controller | Controller | The `tool.call` and `turn.complete` handlers: pass the call on, then hand the result to the Service and the Manager |
+| `hooks/register.ts`, Manager | Manager | The waiting rows: add, keep, write oldest first, drop past 20, one write at a time |
+| `hooks/register.ts`, Connector | Connector | The only code that calls `$.store`, `$.tool.call` and `$.mcp.call` |
+| `hooks/row.ts` | Service | Which call owes a row, its state and preview, the row's shape, reading the lookup's answer. Pure: no imports, no file, network, clock or environment |
+| `hooks/row.ts`, types | Model | The shapes of a waiting row and a row |
 
-The board is a page, `board/index.html`, that holds markup and styles only, and one script, `board/board.ts`. The script is one file, so its parts are classified by section. Each section starts with a comment naming its role.
+The board is a page, `board/index.html`, that holds markup and styles only, and one script, `board/board.ts`, classified by section:
 
 | Section of `board/board.ts` | Role | What lives there |
 |---|---|---|
@@ -125,56 +165,90 @@ The board is a page, `board/index.html`, that holds markup and styles only, and 
 | Transformer | Transformer | Stored row to display row |
 | Model | Model | The display row shape |
 
-Roles this scope does not use: Domain, Gateway, Provider (first-party), Contract and Entity. The plugin also has no Transformer and no Client, and the board has no Controller and no Manager. With no Domain types, each Service holds its rules, as policy Section 5.3 allows.
+Roles this scope does not use: Domain, Gateway, Provider (first-party), Contract and Entity. The plugin has no Transformer and no Client. The board has no Controller and no Manager. With no Domain types, each Service holds its rules, as policy Section 5.3 allows.
 
 Dependencies used, all inside the policy's allow-list:
 
 | From | To |
 |---|---|
-| Controller | Service, Model |
-| Service (plugin) | Manager, Model |
+| Controller | Service, Manager, Model |
 | Manager | Connector, Model |
 | Connector | Model |
 | Client | Service, Connector, Transformer, Model |
 | Transformer | Model |
 
-The Composition Root passes the Manager into the Service and the Connector into the Manager as arguments. The time and the board address are passed in as plain values, so the Service reads no clock and no environment.
+The time and the thread id are read in `hooks/register.ts` and passed into `hooks/row.ts` as plain values, so the Service reads no clock and no environment.
 
-### 4. External facility mappings
+### 6. External facility mappings
 
 | Facility | Mapping | Who may call it |
 |---|---|---|
-| Hook event on standard input, hook output on standard output, exit code | Framework inbound handling and response writing | Composition Root and Controller |
-| Node file system calls for the note file | External Connector facility | `src/connector.ts` only |
-| Process environment and the system clock | External Provider abstraction | Composition Root only. Values are passed in. |
+| Module events (`tool.call`, `turn.complete`, `tool.judge`) and `next` | Framework inbound handling | Composition Root and Controller sections |
+| `$.env.get`, `$.clock` | External Provider abstraction | `hooks/register.ts` only. Values are passed in. |
+| `$.store` (the plugin's note) | External Connector facility | Connector section only |
+| `$.tool.call` (`ArtifactData` set on the board) | External Connector facility | Connector section only |
+| `$.mcp.call` (`claude-code-remote` `get_session`) | External Connector facility | Connector section only |
+| `$.tool.list`, `$.ui.log` | Diagnostics | `hooks/register.ts` only |
 | The page database (`claude.use("db")`) | External Connector facility | The board's Connector section only |
 | The browser document | Framework response writing | The board's Client section only |
 
-The row write itself is not this repository's code. The thread's agent makes it with Claude's `ArtifactData` tool, and the turnstile only checks that it happened.
+Not allowed in the module: `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt`, `$.model`, and any tool call other than the one in R8. Adding one is a trust boundary change: stop and ask Josh.
 
 ## Consequences
 
 ### Positive
 
-- **POS-001**: Reporting is enforced by code. A thread that tells Josh something cannot end its turn without a row.
-- **POS-002**: One list across every project, with no change to any project beyond switching the plugin on.
-- **POS-003**: Nothing is hosted, no network rule changes, and no secret is stored.
-- **POS-004**: The gate rules are one function with no file or network access, so every rule has a plain test.
-- **POS-005**: The gate fails open. No board address, a broken board, or two refusals in a row all let the thread carry on.
-- **POS-006**: The agent supplies the state, so the board can say "needs you" or "ready for review", which a hook alone cannot know.
+- **POS-001**: Reporting is done by code. The model plays no part, so a model that skips an instruction cannot lose a row.
+- **POS-002**: The board write skips the safety check that refused one model-written row in five (CTX-021, CTX-024).
+- **POS-003**: One list across every project, from one upload on the account Plugins page.
+- **POS-004**: Nothing is hosted, no network rule changes, and no secret is stored.
+- **POS-005**: No turn is ever blocked. A broken board costs a thread at most 8 seconds at turn end.
+- **POS-006**: The row rules are pure functions in one file, so every rule has a plain test.
+- **POS-007**: No extra tool call by the model, and no dependence on the Node version of the thread's machine.
 
 ### Negative
 
-- **NEG-001**: A turn that dies from an error never reaches the gate, and a turn the gate gives up on is missed. Neither shows on the board in the MVP.
-- **NEG-002**: The label is only as good as what the agent writes. The hook checks that the fields exist, not that they are true.
-- **NEG-003**: Every turn that tells Josh something costs one extra tool call.
-- **NEG-004**: The plugin path, the other permission modes and the row link are proven in one thread only or not at all. The design depends on Milestone 0.
-- **NEG-005**: The design rests partly on observed behavior (CTX-006 to CTX-012 and CTX-017). Anthropic may change it without notice.
-- **NEG-006**: A row leaves Priority when Josh clicks it on the board, not when he opens the thread some other way.
-- **NEG-007**: Six files for about sixty lines of gate code is more structure than the code needs. This is the cost of following the layers policy.
-- **NEG-008**: The plugin depends on Node 24.22.3 being present on the thread's machine. That was seen at one path on one machine and is not promised (CTX-017). The machine's default Node is older. Where 24.22.3 is missing, the gate does not block, and turns go unreported with no visible error.
+- **NEG-001**: Plugin code on Josh's account writes to his private board from every cloud thread, with no approval prompt and no safety check on that write. The free text it writes is the thread's title (a thread can rename itself) and the first line of what it told him, each up to 200 characters.
+- **NEG-002**: The design depends on Josh's account having no organization guard (CTX-023). If the account moves to Team or Enterprise, or gains managed settings, the module's call is refused until an admin allows it (CTX-032), and rows wait in the note and are lost with the machine.
+- **NEG-003**: The project name rests on an undocumented title format and an undocumented wrapper around the parent's record (CTX-025). If either changes, rows go out with no project name.
+- **NEG-004**: The design rests on observed behavior (CTX-019 to CTX-026) and on a type file the docs say "can be older than the Claude Code version you have installed". Anthropic may change any of it without notice.
+- **NEG-005**: The state comes either from code (coarse: a question in a plain reply shows as `review`) or from the model (which brings the model back in). See OPEN-002.
+- **NEG-006**: Waiting rows (thread id, time, state, preview) sit in a small file on the thread's machine until written.
+- **NEG-007**: A row leaves Priority when Josh clicks it on the board, not when he opens the thread some other way.
+- **NEG-008**: The main chat writes no rows (CTX-022).
+
+### What can still lose a row
+
+From T8, "What can still lose a row", and the T8 reviewer:
+
+1. The board stays down until the thread's machine is reclaimed. The waiting rows are on that machine and go with it. The plugin makes no network call of its own, so it has nowhere else to put them.
+2. More than 20 rows wait at once. The oldest is dropped and the drop is logged.
+3. Josh stops a thread mid-turn. Claude Code refuses the module's calls until his next message (CTX-034). The row waits and goes out on the next turn, unless the machine is reclaimed first.
+4. A board call that never answers. Turn end stops waiting after 8 seconds. Later writes queue behind the stuck call until Claude Code restarts, then go out from the note.
+5. Another plugin refuses the module's call on every retry.
+6. The account moves to a Team or Enterprise plan (NEG-002).
+7. Ways a thread reaches Josh that no tool call shows: approval prompts, crashes, threads run on his computer, messages sent outside the project app (T4, Josh's q8 accepted these blind spots).
+
+### Open, not proven
+
+- **OPEN-001**: Project name. The first live rows had no project, because the parent's record comes wrapped (CTX-025). The fix is in build `0.0.1-t8` (commit `cda4acc` on the T8 branch), not yet swapped in by Josh. No live row with a project name has been seen.
+- **OPEN-002**: The state rule. Josh's T4 answer q6 was that the thread picks the label every time. With no model involved, code picks it (R10). This conflicts with q6 and has not been put to Josh. It is not settled by this record.
+- **OPEN-003**: A failed write kept and retried is shown only by unit tests, not live.
+- **OPEN-004**: The log line `Skipping auto mode classifier for ArtifactData: called by plugin thread-queue` was read only in the T8 thread's own log. For the other four threads with rows, the proof is the rows landing and, for Josh's test thread, no `ArtifactData` call by the model in its transcript.
+- **OPEN-005**: The main chat. Josh wants it on the list only by a checked, agent-free way (T4 q7). None is known.
+- **OPEN-006**: T2 stays open until rows from all four models are seen on this design.
 
 ## Alternatives Considered
+
+### The turnstile: block the turn until the model writes the row
+
+- **ALT-017**: **Description**: A plugin's Stop hook blocks a turn that told Josh something until the thread's model writes its row. After two blocks the gate opens. This was the design in earlier drafts.
+- **ALT-018**: **Rejection Reason**: The model's write is judged by the server-side safety check, which refused one of five writes from other projects (CTX-021), and the gate then gave up after two blocks, so the row was lost. In T2, three of four first runs lost their rows the same way. That breaks CTX-035. The gate also bounced every main chat turn twice for nothing (CTX-022). The model, not code, chose the label.
+
+### Let only the board write skip the safety check (T7)
+
+- **ALT-019**: **Description**: The turnstile stays, and a plugin rule approves exactly one call (`ArtifactData` set on the board, collection `turns`) so the safety check is not asked.
+- **ALT-020**: **Rejection Reason**: Josh said no on 2026-11-22 (CTX-036). It still needs the model to make the write, and it widens what the model may do without a check.
 
 ### An instruction that asks threads to report
 
@@ -184,17 +258,17 @@ The row write itself is not this repository's code. The thread's agent makes it 
 ### The board lists sessions itself
 
 - **ALT-003**: **Description**: The page asks Claude's built-in session connector for all sessions and needs no plugin.
-- **ALT-004**: **Rejection Reason**: Blocked on 2026-11-21. The connector would not load for a page (CTX-011). Worth one retest later, since it would need no setup at all.
+- **ALT-004**: **Rejection Reason**: The page can find the connector but its reads are refused (CTX-011, CTX-022). Worth a retest later, since it would need no setup and would also cover the main chat.
 
-### A hook with no agent step
+### A command hook with no agent step
 
-- **ALT-005**: **Description**: A hook calls a connector tool directly each time a turn ends.
-- **ALT-006**: **Rejection Reason**: It works (CTX-009), but the hook is not told the title, project or reply text (CTX-008), so its row could only say that some thread finished. Kept as the Milestone 3 safety net.
+- **ALT-005**: **Description**: A command hook script records each finished turn by itself.
+- **ALT-006**: **Rejection Reason**: A command hook's input has no title, project or reply text (CTX-008). The hooks module chosen here is the same idea done from inside Claude Code, where it can read the title and project itself.
 
 ### A hosted collector
 
 - **ALT-007**: **Description**: A hook posts each finished turn to a small hosted service, and the board reads from there.
-- **ALT-008**: **Rejection Reason**: It needs hosting, a secret and a network rule change in every environment, and it has the same labelling gap as ALT-005.
+- **ALT-008**: **Rejection Reason**: It needs hosting, a secret and a network rule change in every environment.
 
 ### The Reddit recipe
 
@@ -208,31 +282,34 @@ The row write itself is not this repository's code. The thread's agent makes it 
 
 ### Plain JavaScript
 
-- **ALT-013**: **Description**: Write the gate and the board in plain JavaScript, as the prototype is.
+- **ALT-013**: **Description**: Write the plugin and the board in plain JavaScript, as the prototype is.
 - **ALT-014**: **Rejection Reason**: Josh requires TypeScript (CTX-016).
 
-### TypeScript compiled to JavaScript before install
+### TypeScript compiled to JavaScript before upload
 
-- **ALT-015**: **Description**: Compile the plugin with `tsc` and commit the compiled files, so the hooks run plain JavaScript.
-- **ALT-016**: **Rejection Reason**: A plugin installs straight from the repository with no build on install, so the compiled files would have to be committed and kept in step with the source by hand. Node on the thread's machine already runs the `.ts` files (CTX-017). Revisit if Milestone 0 shows a thread whose Node cannot.
+- **ALT-015**: **Description**: Compile the module with `tsc` and ship the compiled files.
+- **ALT-016**: **Rejection Reason**: Claude Code loads a `.ts` module directly (CTX-030, CTX-024). Compiled files would have to be kept in step with the source by hand.
 
 ## Implementation Notes
 
-- **IMP-001**: Milestone 0 runs first: prove the gate blocks when it arrives as a plugin in a second project, prove the row write needs no approval click in each permission mode Josh uses, prove the row link opens the thread, and settle which turns owe a row and what each state means. This record is updated with the results before any build issue starts.
-- **IMP-002**: Rows on the board are written by agents and are untrusted. The board shows them as plain text and follows a link only if it points at claude.ai.
-- **IMP-003**: A row holds the thread id, title, project name, state, time, a one-line preview and a link. No prompts, replies or tool input are stored.
-- **IMP-004**: The gate's instruction tells the thread how to load the `ArtifactData` tool when it is not loaded.
+- **IMP-001**: Milestone 0 is done except OPEN-001 to OPEN-006. The T8 test build is on branch `claude/project-thread-5rsmom` and is never merged. The build-out (Milestones 1 and 2) is not approved.
+- **IMP-002**: Rows on the board are written from thread text and are untrusted. The board shows titles and previews as plain text (a preview can hold markup, seen in T8) and follows a link only if it points at `https://claude.ai/`.
+- **IMP-003**: A row holds the thread id, title, project name, state, time, a one-line preview and a link. No prompts, full replies or tool input are stored. The T8 build also writes `gate: "t8-plugin"` as a test marker.
+- **IMP-004**: Install: remove any older Thread Queue plugin (`thread-queue-turnstile`), then upload the `thread-queue` zip on the account Plugins page. Two Thread Queue plugins at once spoil the proof and bring the gate back.
 - **IMP-005**: The board removes rows older than 30 days. Its database holds at most 25,000 rows.
-- **IMP-006**: Work is assigned under the Agent Routing and Capacity Contract v0.9. Josh approves each issue and its tier before work starts. Agents do not merge pull requests. A Haiku worker makes all Linear writes from an exact spec.
+- **IMP-006**: Work is assigned under the Agent Routing and Capacity Contract v0.9. Josh approves each issue and its tier before work starts. Agents do not merge pull requests. A Haiku worker makes all Linear writes from an exact spec. Any change to what the module may call (Section 6) is a Specialist trigger.
 - **IMP-007**: Success is the Milestone 2 check: threads in at least three projects finish turns within the same few minutes and all show on the board, and one week of use gives a count of missed turns.
-- **IMP-008**: A working prototype of the gate script and the board page from 2026-11-21 is in the project folder under `thread-queue/prototype/`. It is plain JavaScript and predates CTX-016. The Milestone 0 plugin test runs a TypeScript port of the gate, so the test also proves CTX-017 in a second project.
+- **IMP-008**: To check a thread: its Claude Code log at `/tmp/claude-code.log` shows `hooks module thread-queue@synced loaded`, and a line `thread-queue: row <id> written by the plugin` per row, or `not written, kept` with the reason.
 
 ## References
 
-- **REF-001**: Related ADRs: none yet. The Milestone 3 safety net will need one if it adds a second place to record turns.
+- **REF-001**: Related ADRs: none yet. A second place to record turns (the Milestone 3 safety net) will need one.
 - **REF-002**: Plan: Thread Queue MVP Gameplan, https://claude.ai/artifact/TRJjujoLPsyw3gGggp6KFy
-- **REF-003**: The board prototype, https://claude.ai/artifact/ByotUv4ViCSyFxtHF5cbNG
+- **REF-003**: The board, https://claude.ai/artifact/ByotUv4ViCSyFxtHF5cbNG
 - **REF-004**: Claude Code hooks reference, https://code.claude.com/docs/en/hooks
 - **REF-005**: Claude Code projects, https://code.claude.com/docs/en/claude-projects
 - **REF-006**: Software Layer Roles and Dependency Policy v2.0.0-rc.4, https://github.com/Rule-0-Softworks/rule-0-softworks-platform/blob/main/docs/architecture/software-layers-v2.0.0-rc.4.md
 - **REF-007**: Agent Routing and Capacity Contract v0.9, https://github.com/Rule-0-Softworks/rule-0-softworks-platform/blob/main/docs/config/agent-routing-and-capacity-contract-v0.9.md
+- **REF-008**: Mods reference, overview, API and admin pages, https://code.claude.com/docs/en/plugins/mods/reference and siblings
+- **REF-009**: Mods type file, https://github.com/anthropics/claude-code/blob/main/mods/types/claude-code.d.ts
+- **REF-010**: Milestone 0 reports `T1.md` to `T8.md`, Claude project shared folder, `thread-queue/m0-evidence/`
