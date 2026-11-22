@@ -1,14 +1,5 @@
 {
-  "name": "thread-queue-turnstile",
-  "version": "0.0.0-t7",
-  "description": "Milestone 0 test build of the Thread Queue gate, with the T7 board row approval. Not for real use.",
-  "userConfig": {
-    "board_url": {
-      "type": "string",
-      "title": "Board address",
-      "description": "Address of the Thread Queue board page. Optional: a built-in default is used when empty.",
-      "sensitive": false,
-      "required": false
-    }
-  }
+  "name": "thread-queue",
+  "version": "0.0.0-t8",
+  "description": "Test build T8: the plugin writes each thread's row to the Thread Queue board itself. No gate. Not for real use."
 }

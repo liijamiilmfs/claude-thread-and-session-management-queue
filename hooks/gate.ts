@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BOARD as DEFAULT_BOARD, LIMITS, STATES, threadOf } from './approve.ts';
+import { BOARD as DEFAULT_BOARD, LIMITS, STATES, threadOf } from './row.ts';
 
 const MAX_BLOCKS = 2;
 const MIN_NODE = [24, 22, 3];

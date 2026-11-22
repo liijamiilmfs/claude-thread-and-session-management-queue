@@ -3,9 +3,9 @@
   "owner": { "name": "Rule 0 Softworks" },
   "plugins": [
     {
-      "name": "thread-queue-turnstile",
+      "name": "thread-queue",
       "source": "./",
-      "description": "Milestone 0 test build of the Thread Queue gate."
+      "description": "Test build T8: the plugin writes each thread's row to the board itself."
     }
   ]
 }
