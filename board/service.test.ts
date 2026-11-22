@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
 import { toDisplay } from './transformer.ts';
 import { newest, groups, isPriority, dayLabel, expired, MAX_DELETES } from './service.ts';
 
@@ -77,4 +78,18 @@ test('deletes are capped by the budget the caller passes in', () => {
   assert.equal(expired(rows, NOW).length, MAX_DELETES);
   assert.equal(expired(rows, NOW, 5).length, 5);
   assert.equal(expired(rows, NOW, 0).length, 0);
+});
+
+// The delete lock: TypeScript compares shapes, so a cast would get around the checked type.
+// This fails on any cast to ExpiredIds in shipped code outside service.ts (tests may cast to fake a list).
+test('nothing outside service.ts casts to ExpiredIds', () => {
+  const dir = new URL('./', import.meta.url);
+  const files = readdirSync(dir).filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'service.ts');
+  assert.ok(files.includes('connector.ts') && files.includes('manager.ts') && files.includes('client.ts')); // the scan is looking at the right files
+  for (const f of files) {
+    const src = readFileSync(new URL(f, dir), 'utf8');
+    assert.doesNotMatch(src, /\bas\s+(?:unknown\s+as\s+)?ExpiredIds\b|<\s*ExpiredIds\s*>\s*[\w(\[]/, f + ' casts to ExpiredIds');
+  }
+  // and the one place that makes it still does
+  assert.match(readFileSync(new URL('service.ts', dir), 'utf8'), /as unknown as ExpiredIds/);
 });
