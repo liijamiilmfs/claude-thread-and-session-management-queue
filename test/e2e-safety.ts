@@ -32,7 +32,7 @@ const say = (text: string) => { console.log(text.replaceAll(SECRET, '[the made-u
 
 // ---- The board, reached through `claude mcp serve`: Claude Code's own ArtifactData tool, no model in between. ----
 
-const server = { send: (_line: string) => {}, stop: () => {}, waiting: new Map<number, (answer: { result?: unknown; error?: unknown }) => void>(), id: 0 };
+const server = { send: (_line: string) => {}, stop: () => {}, waiting: new Map<number, (answer: { result?: unknown; error?: unknown }) => void>(), id: 0, gone: '' };
 
 function startServer(): void {
   const child = spawn(CLAUDE, ['mcp', 'serve'], { env, stdio: ['pipe', 'pipe', 'ignore'] });
@@ -49,7 +49,11 @@ function startServer(): void {
       } catch { /* not an answer */ }
     }
   });
-  child.on('error', () => { for (const done of server.waiting.values()) done({ error: 'the claude command did not start' }); });
+  // The server is gone: every call still waiting gets an answer, so the run ends with a message and its cleanup.
+  const gone = (why: string) => { server.gone ||= why; for (const [id, done] of server.waiting) { server.waiting.delete(id); done({ error: why }); } };
+  child.on('error', () => gone('the claude command did not start'));
+  child.on('exit', () => gone('claude mcp serve stopped'));
+  child.stdin.on('error', () => gone('claude mcp serve cannot be reached'));
   server.send = (line) => { child.stdin.write(line + '\n'); };
   server.stop = () => { child.kill(); };
 }
@@ -57,8 +61,10 @@ function startServer(): void {
 function rpc(method: string, params: unknown): Promise<{ result?: unknown; error?: unknown }> {
   const id = ++server.id;
   return new Promise((done) => {
-    server.waiting.set(id, done);
-    setTimeout(() => { if (server.waiting.delete(id)) done({ error: 'no answer in 60 seconds' }); }, 60000).unref();
+    const limit = setTimeout(() => { if (server.waiting.delete(id)) done({ error: 'no answer in 60 seconds' }); }, 60000);
+    server.waiting.set(id, (answer) => { clearTimeout(limit); done(answer); });
+    // A call made after the server is gone is answered at once.
+    if (server.gone) { server.waiting.get(id)?.({ error: server.gone }); server.waiting.delete(id); return; }
     server.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
   });
 }
@@ -178,22 +184,35 @@ async function case1(file: string): Promise<Outcome> {
 // Case 2: one save fails, the row is kept, the next try writes it.
 async function case2(file: string, before: number): Promise<Outcome> {
   say('\nCase 2: a board save that fails once');
-  let open = false;
-  let refused = 0;
+  // Made to fail by the test, in two ways, until the row has been seen waiting after each. Every later save is real.
+  let door: 'throws' | 'board refuses' | 'open' = 'throws';
+  let thrown = 0;
+  const refusals: string[] = [];
   const w = await world(file, async (call) => {
-    // Made to fail by the test: until the row has been seen waiting, each save is refused here and never sent. Every later one is real.
-    if (!open) { refused++; throw new Error('save refused by the test, not sent'); }
+    // 1. The save is refused here and never sent.
+    if (door === 'throws') { thrown++; throw new Error('save refused by the test, not sent'); }
+    // 2. The save is sent with a version the new row cannot have, so the real board refuses it and writes nothing.
+    if (door === 'board refuses') {
+      const out = await board({ ...call, tool: undefined, if_version: 999999 });
+      if (!out.isError) wrote++;
+      refusals.push(out.isError ? out.text.slice(0, 120) : 'NOT REFUSED');
+      return out;
+    }
     return realDoor(call);
   });
   await w.tell(CASE_2);
   await w.turnEnd();
-  const kept = w.note.get('waiting');
-  const at = Array.isArray(kept) && kept.length === 1 ? (kept[0] as { at?: unknown }).at : undefined;
+  const waits = () => { const kept = w.note.get('waiting'); return Array.isArray(kept) && kept.length === 1 ? (kept[0] as { at?: unknown }).at : undefined; };
+  const at = waits();
   const id = THREAD + '.' + at;
-  const early = (await myRows()).filter((row) => row.id === id).length;
-  if (at === undefined || early !== 0) { say('  FAIL: after the failed save the row is not waiting in the note, or it is already on the board'); return 'fail'; }
-  say('  after ' + refused + ' refused saves: row ' + id + ' waits in the note, the board has no such row');
-  open = true;
+  const onBoard = async () => (await myRows()).filter((row) => row.id === id).length;
+  if (at === undefined || thrown === 0 || (await onBoard()) !== 0) { say('  FAIL: after the failed save the row is not waiting in the note, or it is already on the board'); return 'fail'; }
+  say('  after ' + thrown + ' saves that failed before they were sent: row ' + id + ' waits in the note, the board has no such row');
+  door = 'board refuses';
+  await w.turnEnd();
+  if (waits() !== at || refusals.length === 0 || refusals.includes('NOT REFUSED') || (await onBoard()) !== 0) { say('  FAIL: after the board refused the save the same row is not waiting in the note, or it is on the board'); return 'fail'; }
+  say('  after ' + refusals.length + ' saves the real board refused ("' + refusals[0] + '"): the same row still waits, the board has no such row');
+  door = 'open';
   await w.turnEnd();
   const rows = await myRows();
   const mine = rows.filter((row) => row.id === id);
@@ -226,7 +245,8 @@ async function main(): Promise<Outcome> {
   say('End-to-end safety test. Test board: ' + TEST_BOARD + '. Thread id: ' + THREAD + '. Made-up secrets only.');
   if (TEST_BOARD === LIVE) throw new Error('stopped: the test board is the live list');
   startServer();
-  await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'thread-queue-e2e', version: '0' } });
+  const hello = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'thread-queue-e2e', version: '0' } });
+  if (!hello.result) throw new Error('stopped: the claude command could not be reached (' + String(hello.error) + '). Is it installed? Nothing was written.');
   server.send(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }));
   const tools = (await rpc('tools/list', {})).result as { tools?: { name: string }[] } | undefined;
   if (!tools?.tools?.some((tool) => tool.name === 'ArtifactData')) throw new Error('stopped: this machine\'s claude command does not offer the ArtifactData tool (is it installed and signed in?)');
@@ -238,7 +258,9 @@ async function main(): Promise<Outcome> {
     const first = await case1(file);
     results = [first, await case2(file, (await myRows()).length)];
   } finally {
-    if (!(await removeMine())) results.push('fail');
+    // A cleanup that cannot run says so: the rows may still be there.
+    const removed = await removeMine().catch((err) => { say('\nFAIL: the test\'s rows could not be removed (' + String(err instanceof Error ? err.message : err).slice(0, 200) + '). Rows with thread id ' + THREAD + ' may still be on the test board.'); return false; });
+    if (!removed) results.push('fail');
   }
   return results.includes('fail') || results.length < 2 ? 'fail' : results.includes('inconclusive') ? 'inconclusive' : 'pass';
 }
