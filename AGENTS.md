@@ -59,9 +59,10 @@ Plugin files (ADR-0001, Section 5). `hooks/register.ts` is an empty shell until 
 | `.claude-plugin/plugin.json` | Manifest (not governed) |
 | `hooks/hooks.json` | Points Claude Code at the module (not governed) |
 | `hooks/register.ts` | Sections: Composition Root, Controller, Service, Manager, Gateway, Connector |
+| `hooks/transformer.ts` | Transformer: reads the model's answer and the lookup's answer. Built under `RUL-3168` |
 | `hooks/row.ts` | The Service's rules (its owned support) and Model |
 
-Claude Code lets the `$` object be passed only to top-level functions of the module's own file, so every `$` call lives in `hooks/register.ts`. Its sections are marked by comments naming the role. It is the only file that holds more than one role. Everywhere else, one file holds one layer (Josh, 2026-11-22, ADR-0001 CTX-049).
+Claude Code lets the `$` object be passed only to top-level functions of the module's own file, so every `$` call lives in `hooks/register.ts`. Its sections are marked by comments naming the role. It is the only file that holds more than one role. `hooks/transformer.ts` uses no `$`, so it is a file of its own. Everywhere else, one file holds one layer (Josh, 2026-11-22, ADR-0001 CTX-049).
 
 The board is a page, `board/index.html` (markup and styles only), and one TypeScript file per layer (ADR-0001, Section 5). Each file starts with a comment naming its role.
 
@@ -83,6 +84,10 @@ Rules a reviewer checks:
 - The Gateway section saves nothing, decides nothing about a row, and never calls the Manager. Saving rows stays on the road Service, Manager, Connector.
 - The last look returns a checked call, a branded type only `hooks/row.ts` can make. The Manager's and the Connector's write functions accept only that type. No cast to it appears outside `hooks/row.ts`.
 - Only the Service section calls the functions in `hooks/row.ts`.
+- `hooks/transformer.ts` reads outside text: the model's answer and the `get_session` lookup's answer. It uses no `$`, its only import is `import type` from `hooks/row.ts`, and it never throws. Only the Gateway section calls it (Josh, 2026-11-23, ADR-0001 CTX-055).
+- The Gateway hands the Service only the Transformer's answer. For the model's look: `fine`, `hide-title`, `hide-preview`, `hide-both` or `unreadable`. For the lookup: the title and the project as text, or `not-found`. The Service section never names a raw reply type and never calls `hooks/transformer.ts`.
+- The model's raw reply and the lookup's raw reply each have their own named type, never a plain `string`. Only the Connector section makes them and only `hooks/transformer.ts` reads them. The answer types are Model types in `hooks/row.ts`, and the Gateway's two functions declare them as their return types.
+- What each answer does to a row stays a rule in `hooks/row.ts`.
 - The Service section passes `$` on and never calls anything on it.
 - Only the Connector section of `hooks/register.ts` calls `$.store`, `$.tool.call`, `$.mcp.call` and the one `$.model` call. Right before `$.tool.call` it compares the tool, the action, the address and the collection with the constants once more (the second compare).
 - `$.tool.list` is not on the list of what the module may do (Josh, 2026-11-22, ADR-0001 OPEN-011).
@@ -129,7 +134,7 @@ Safety check rules (ADR-0001, R8 and R11 to R14, built under `RUL-3168`):
 - It runs right before every write, on every row: fresh, tried again, or read back from the note. The note is not trusted.
 - Right before every write, code compares the call with the one approved shape (the last look). A call that fails is replaced by a bare row.
 - The Connector's second compare comes after the last look. If it fails, that call writes nothing and a bare row goes through the same door. If the bare row fails too, the row stays in the note and the failure is logged. Nothing is dropped.
-- Title, project and preview are cleaned. Text that looks like a secret has its whole field swapped for a fixed stand-in. The strict rule applies: hide on any doubt.
+- Title, project and preview are cleaned. The strict rule applies: hide on any doubt. Every word a match touches is replaced by the marker `[hidden]` and the rest stays readable. A private key block, a secret word with a value after it, and any case the code cannot finish swap the whole field for a fixed stand-in (Josh, 2026-11-23, ADR-0001 CTX-056).
 - Text a code rule hid is never logged, never stored and never sent to the model. Text the model hides is never logged.
 - One small model call looks at the cleaned title and preview. It can only hide text. No answer means hide. It never runs past the turn end wait.
 - The model call is allowed only after the live test passes (ADR-0001, OPEN-008). If that test fails, stop and tell Josh first. Then the module makes no model call and the ADR is changed back before any code. This is the one fallback Josh approved.
@@ -207,7 +212,7 @@ Keep scratch files out of the repository. Commit nothing generated.
 - A thread is still blocked at turn end, or its model writes rows: the old `thread-queue-turnstile` plugin is still on the account. Remove it.
 - A row has no project name: the parent lookup failed or its title format changed (ADR-0001, NEG-003).
 - A row's title is the thread id: the title lookup failed, or the safety check hid the title. The row's `check` mark says which.
-- A preview reads "Preview hidden by the safety check" or "Details hidden by the safety check": the safety check hid text or sent a bare row. The log line for that row names the field and the rule, never the text.
+- A title or preview holds `[hidden]`, or a preview reads "Preview hidden by the safety check" or "Details hidden by the safety check": the safety check hid text or sent a bare row. The log line for that row names the field and the rule, never the text.
 - Many rows are marked `hidden-noai`: the model look is not answering. Rows still arrive.
 - Board writes are refused with a deny: check whether the account moved to a Team or Enterprise plan, which loads the organization guard (ADR-0001, NEG-002).
 - The main chat has no rows: expected. It has no board tool.
