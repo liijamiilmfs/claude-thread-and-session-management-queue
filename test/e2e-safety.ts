@@ -102,9 +102,11 @@ function copyOfModule(): string {
   for (const name of ['row.ts', 'register.ts', 'transformer.ts']) {
     const shipped = readFileSync(new URL('../hooks/' + name, import.meta.url), 'utf8');
     const copy = shipped.replaceAll(LIVE, TEST_BOARD);
-    const swaps = shipped.split(LIVE).length - 1;
+    // How often an address stands in a file's source text.
+    const times = (text: string, address: string) => text.split(address).length - 1;
+    const expected = name === 'transformer.ts' ? 0 : 1;
     // Proof: the address is swapped where expected, and putting it back gives the shipped file again.
-    if (shipped.includes(TEST_BOARD) || swaps !== (name === 'transformer.ts' ? 0 : 1) || copy.includes(LIVE) || copy.replaceAll(TEST_BOARD, LIVE) !== shipped) {
+    if (times(shipped, TEST_BOARD) !== 0 || times(shipped, LIVE) !== expected || times(copy, LIVE) !== 0 || times(copy, TEST_BOARD) !== expected || copy.replaceAll(TEST_BOARD, LIVE) !== shipped) {
       throw new Error('stopped: the copy of ' + name + ' would differ from the shipped file in more than the address');
     }
     writeFileSync(join(dir, name), copy);
