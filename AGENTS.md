@@ -84,8 +84,9 @@ Rules a reviewer checks:
 - The Gateway section saves nothing, decides nothing about a row, and never calls the Manager. Saving rows stays on the road Service, Manager, Connector.
 - The last look returns a checked call, a branded type only `hooks/row.ts` can make. The Manager's and the Connector's write functions accept only that type. No cast to it appears outside `hooks/row.ts`.
 - Only the Service section calls the functions in `hooks/row.ts`.
-- `hooks/transformer.ts` reads outside text: the model's answer and the `get_session` lookup's answer. It uses no `$`, imports nothing but types from `hooks/row.ts`, and never throws. Only the Gateway section calls it (Josh, 2026-11-23, ADR-0001 CTX-055).
-- The Gateway hands the Service only the Transformer's answer. For the model's look: `fine`, `hide-title`, `hide-preview`, `hide-both` or `unreadable`. For the lookup: the title and the project as text, or `not-found`. The Service section never names a raw answer type and never calls `hooks/transformer.ts`.
+- `hooks/transformer.ts` reads outside text: the model's answer and the `get_session` lookup's answer. It uses no `$`, its only import is `import type` from `hooks/row.ts`, and it never throws. Only the Gateway section calls it (Josh, 2026-11-23, ADR-0001 CTX-055).
+- The Gateway hands the Service only the Transformer's answer. For the model's look: `fine`, `hide-title`, `hide-preview`, `hide-both` or `unreadable`. For the lookup: the title and the project as text, or `not-found`. The Service section never names a raw reply type and never calls `hooks/transformer.ts`.
+- The model's raw reply and the lookup's raw reply each have their own named type, never a plain `string`. Only the Connector section makes them and only `hooks/transformer.ts` reads them. The answer types are Model types in `hooks/row.ts`, and the Gateway's two functions declare them as their return types.
 - What each answer does to a row stays a rule in `hooks/row.ts`.
 - The Service section passes `$` on and never calls anything on it.
 - Only the Connector section of `hooks/register.ts` calls `$.store`, `$.tool.call`, `$.mcp.call` and the one `$.model` call. Right before `$.tool.call` it compares the tool, the action, the address and the collection with the constants once more (the second compare).
@@ -133,7 +134,7 @@ Safety check rules (ADR-0001, R8 and R11 to R14, built under `RUL-3168`):
 - It runs right before every write, on every row: fresh, tried again, or read back from the note. The note is not trusted.
 - Right before every write, code compares the call with the one approved shape (the last look). A call that fails is replaced by a bare row.
 - The Connector's second compare comes after the last look. If it fails, that call writes nothing and a bare row goes through the same door. If the bare row fails too, the row stays in the note and the failure is logged. Nothing is dropped.
-- Title, project and preview are cleaned. The strict rule applies: hide on any doubt. The part that looks like a secret is replaced by the marker `[hidden]` and the rest stays readable. A private key block, a secret word with a value after it, and any case the code cannot finish swap the whole field for a fixed stand-in (Josh, 2026-11-23, ADR-0001 CTX-056).
+- Title, project and preview are cleaned. The strict rule applies: hide on any doubt. Every word a match touches is replaced by the marker `[hidden]` and the rest stays readable. A private key block, a secret word with a value after it, and any case the code cannot finish swap the whole field for a fixed stand-in (Josh, 2026-11-23, ADR-0001 CTX-056).
 - Text a code rule hid is never logged, never stored and never sent to the model. Text the model hides is never logged.
 - One small model call looks at the cleaned title and preview. It can only hide text. No answer means hide. It never runs past the turn end wait.
 - The model call is allowed only after the live test passes (ADR-0001, OPEN-008). If that test fails, stop and tell Josh first. Then the module makes no model call and the ADR is changed back before any code. This is the one fallback Josh approved.
