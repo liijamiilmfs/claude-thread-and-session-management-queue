@@ -7,7 +7,8 @@
     "node": ">=24.22.3"
   },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test \"**/*.test.ts\"",
+    "e2e:safety": "node test/e2e-safety.ts run",
     "typecheck": "tsc",
     "build:board": "tsc -p board/tsconfig.json"
   },
