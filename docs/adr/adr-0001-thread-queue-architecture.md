@@ -37,6 +37,8 @@ Changed on 2026-11-22 under `RUL-3206`. Josh answered each point before it was w
 
 No plugin code for any of this exists yet. The Gateway, the two R8 additions and the abilities list are built under `RUL-3168`, the fixes under `RUL-3185` to `RUL-3188`, the CI change under `RUL-3207`. The board's files are merged (pull request 9) and are described here as they are.
 
+Changed on 2026-11-23 under `RUL-3213`, after Josh's yes (CTX-055): the plugin gains one file, `hooks/transformer.ts`, role Transformer. It reads the model's answer and the `get_session` lookup's answer, so the Service never holds raw outside text (OPEN-018, Section 5). No code for it exists yet. It is built under `RUL-3168`. The same change sets how the strict secret rule hides text: only the part that looks like a secret is hidden, not the whole field (CTX-056, R12).
+
 Earlier drafts described a pane inside the desktop app (dropped by Josh on 2026-11-21) and then a turnstile that blocked a thread until its model wrote the row (replaced on 2026-11-22 after Milestone 0, see "Alternatives Considered"). No draft was approved, so this text replaces them and nothing is superseded.
 
 Milestone 0 evidence lives outside the repository, in the Claude project's shared folder under `thread-queue/m0-evidence/` (`T1.md` to `T8.md`). Each fact below names its report.
@@ -110,6 +112,15 @@ Josh runs three to five Claude projects at once. Each project's threads run in t
 - **CTX-054**: The values of the four fixes (CTX-038 asked for the fixes).
   - On the Milestone 1 approval page (2026-11-22 09:54Z to 09:57Z) Josh said yes to: at most 500 rows wait (`RUL-3185`), each board write gets 5 seconds (`RUL-3186`), and after a failed read the note is not saved over (`RUL-3188`).
   - At 10:01Z, in the project chat, he said yes to trying a failed note save again, with short growing waits between tries: about 1, 2 and 5 seconds (`RUL-3187`).
+- **CTX-055**: The plugin gets a Transformer file, `hooks/transformer.ts` (OPEN-018, project chat, 2026-11-23).
+  - Asked: add a file that takes the model's raw reply and hands the rest of the code only a checked form. At 14:11Z Josh: "Yes, if it is the safer option, I agree. But I would like to know what the alternative is to weigh the options."
+  - It is the safer option (CTX-041). The alternative was explained to Josh: no new file, and the raw reply passes through the Service, which could log it, save it or put it in a row by mistake (Section 5).
+- **CTX-056**: Strict plus redact (project chat, 2026-11-23).
+  - Found while building `RUL-3168`: on the 471 rows then on the board, the strict rule of CTX-040 hid the whole preview or title of 30 rows (6.4 percent). Every hit was the long run rule and none was a secret: link ids, repository names, file names.
+  - At 14:28Z Josh asked: "Can't it just redact it?" At 14:29Z he chose: "Yes, strict plus redact."
+  - No rule is loosened. Every strict rule still applies, and no link gets a pass. What changes is how much is hidden: the part that looks like a secret is replaced by the marker `[hidden]` and the rest of the field stays readable. Where the end of the secret cannot be found for sure, the whole field is hidden as before (R12).
+  - Recount on the same 471 rows: 30 rows show a marker, and no row loses a whole preview or title.
+  - At 14:17Z, asked whether this change to the record may be made as its own issue: "Yes, that's okay to add."
 
 Rule 0 Softworks requires each repository to adopt the Software Layer Roles and Dependency Policy through a scope-adoption ADR. This record is that ADR for this repository.
 
@@ -189,13 +200,16 @@ Under this table a plain reply that asks Josh a question shows as `review`, and 
   6. The text is cut to its limit by whole characters.
   - Shapes the secret check knows: the header line of a private key block. Keys with a known start (`sk-`, `sk_live_`, `rk_live_`, `ghp_` and its siblings, `github_pat_`, `glpat-`, `xox` tokens, `AKIA`, `AIza`, `npm_`). A web token in three parts that starts `eyJ`. The word Bearer followed by a long token. A user name and password inside a link. A word such as password, passcode, secret, token, api key or credential with a value after it. Any unbroken run of letters, digits and the signs `+ = _ -` that holds both letters and digits. Claude's own ids are let through (they start `cmsg_`, `session_`, `chan_`, `cse_` or `toolu_`).
   - **Strict rule** (Josh, CTX-040): the check hides on any doubt. The unbroken run counts from 16 characters. The word rule counts when the value follows in plain words too ("the password is ..."), not only after a colon or an equals sign.
-  - On a match the whole field is swapped for its stand-in, not just the matched part. Preview: "Preview hidden by the safety check". Title: the thread id. Project: left out. The row's `check` is then `hidden`.
-  - The swap happens before the row goes into the note, so the note never holds text a code rule hid. That text is never logged and never stored. Text the model later hides (R13) does sit in the note until its row is written, because the look runs at the door.
+  - **Strict plus redact** (Josh, CTX-056). On a match, the part that looks like a secret is replaced by the marker `[hidden]` and the rest of the field stays. The part is the whole word the match sits in, from one space to the next, so nothing glued to a key is left behind. Every match in the field is replaced, and the check runs again after the cut. The row's `check` is then `hidden`.
+  - Two shapes have no sure end, because the secret may run on in plain words: the private key header and the secret word rule. On those the whole field is swapped for its stand-in, as on any case where the code cannot finish replacing. Preview: "Preview hidden by the safety check". Title: the thread id. Project: left out. `check` is `hidden`.
+  - If the cut to the limit lands inside a marker, the text is shortened to make room for a whole marker.
+  - A row that already carries the marker when it is read back from the note keeps `check` `hidden`.
+  - The replacing happens before the row goes into the note, so the note never holds text a code rule hid. That text is never logged and never stored. Text the model later hides (R13) does sit in the note until its row is written, because the look runs at the door.
   - The patterns are simple ones that run in a single pass, so none can slow down on a long line. Cleaning twice gives the same result. It runs when the row is queued and again at the door.
-  - A false alarm costs one title or preview. It never costs a row.
+  - A false alarm costs one word of a title or preview, or one whole field for the two shapes with no sure end. It never costs a row.
 - **R13, the model look** (Josh, CTX-040). After the code rules, a small Claude model is asked whether the title and preview are fine to show.
   - It can only hide. Its answer can turn a shown title or preview into its stand-in. It can never stop a row, delay one past its time limit, or change a row in any other way.
-  - It runs second. Only text that already passed R12 is sent. Text a code rule hid, and the fixed stand-in texts, are never sent.
+  - It runs second. Only text that already passed R12 is sent. Text a code rule hid, and the fixed stand-in texts, are never sent. A field with a part hidden is sent with the marker in place of that part.
   - It reads the cleaned title and the cleaned preview of one row, in one call. Nothing else: no project name, no thread content, no other row.
   - It answers with one of a few fixed words: fine, hide the preview, hide the title, hide both. Hide covers a secret in any shape, private details about a person, and text written as an order to an AI.
   - No answer means hide. Too slow, an error, an empty reply or a word not on the list: the title and preview are swapped for their stand-ins, the row goes out, and `check` is `hidden-noai`.
@@ -223,7 +237,7 @@ The four states and their meanings, in order (T4 section 2, Josh's q5): `needs_y
   - As merged, the test is skipped on a machine with no `claude` command. CI has none, so CI is green whether or not the check ran.
   - Josh, CTX-051: CI may install the `claude` command for this check, at one exact version. It is a tool of the check. The plugin never needs it at run time. CI gets no secret for it. Built under `RUL-3207`. From then on, a missing `claude` command fails the CI run. It does not skip.
   - Josh, CTX-052: CI also builds the board (`npm run build:board`) on every pull request, so a board file that does not compile fails it. Built under `RUL-3207`.
-- A second build check, the source test, is a plain test on the text of the two plugin files. It runs in CI with no `claude` command. It passes only if: `$.tool.call(` appears once in `hooks/register.ts`. `$.mcp.call(` appears only with `claude-code-remote` and `get_session`. None of `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt`, `$.session`, `$.agent` appears. `$.model.` appears once, as the one call R13 allows, and `$.model.fork` never appears. `hooks/row.ts` has no `import` and no `$`. The Service section of `hooks/register.ts` never calls anything on `$`. No cast to the checked call type appears outside `hooks/row.ts`.
+- A second build check, the source test, is a plain test on the text of the three plugin files. It runs in CI with no `claude` command. It passes only if: `$.tool.call(` appears once in `hooks/register.ts`. `$.mcp.call(` appears only with `claude-code-remote` and `get_session`. None of `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt`, `$.session`, `$.agent` appears. `$.model.` appears once, as the one call R13 allows, and `$.model.fork` never appears. `hooks/row.ts` has no `import` and no `$`. `hooks/transformer.ts` has no `$` and imports nothing but types from `hooks/row.ts`. The Service section of `hooks/register.ts` never calls anything on `$`, never calls `hooks/transformer.ts`, and never names a raw answer type. Only the Gateway section calls `hooks/transformer.ts`. No cast to the checked call type appears outside `hooks/row.ts`.
 - `build` comes from a constant in `hooks/register.ts`. A test fails when it differs from the version in `.claude-plugin/plugin.json`.
 - Release check: the zip is built from a merged commit and its checksum is recorded. After the upload, the checksum of the file that reached a thread's machine is compared with it, as T8 did.
 - A browser cannot run TypeScript, so the board's files are compiled with `tsc` when the board is published, one `.js` file for each `.ts` file. The compiler also turns each `.ts` import into a `.js` import, so no new build tool is added. The compiled files are published beside the page and are not committed.
@@ -237,7 +251,7 @@ Rationale: the module is code and runs whether or not the model remembers (CTX-0
 | Policy | Software Layer Roles and Dependency Policy, `R0S-ARCH-LAYERS`, version `2.0.0-rc.4` |
 | Immutable artifact identifier | File `docs/architecture/software-layers-v2.0.0-rc.4.md` in `Rule-0-Softworks/rule-0-softworks-platform` at commit `32e4c1c548d3bbef05dd66460f72536cf5253872`, SHA-256 `84f1792b0a3b583cfd0486aa5e40e31fd71e542d2d88f6bf8e88d610155b6fcd` |
 | Previously Active policy | None. This is a new repository. |
-| Governed scopes | `hooks/register.ts`, `hooks/row.ts`, `board/main.ts`, `board/client.ts`, `board/service.ts`, `board/manager.ts`, `board/connector.ts`, `board/transformer.ts` and `board/model.ts` |
+| Governed scopes | `hooks/register.ts`, `hooks/row.ts`, `hooks/transformer.ts`, `board/main.ts`, `board/client.ts`, `board/service.ts`, `board/manager.ts`, `board/connector.ts`, `board/transformer.ts` and `board/model.ts` |
 | Exclusions | Test files (`*.test.ts`), JSON manifests and config, and documentation |
 | Adoption owner | Josh |
 | Approval date | 2026-11-22 |
@@ -252,9 +266,9 @@ Rationale: the module is code and runs whether or not the model remembers (CTX-0
 
 ### 5. Classification record
 
-The planned six gate files no longer match: there is no gate. The T8 build has two files, and this proposal keeps them.
+The planned six gate files no longer match: there is no gate. The T8 build has two files. This record keeps them and adds one, `hooks/transformer.ts` (CTX-055).
 
-One limit shapes the split. Claude Code's checker lets the `$` object be passed only to top-level functions of the module's own file (T8, `claude plugin validate`). So every `$` call has to live in `hooks/register.ts`. That file is classified by section. Each section starts with a comment naming its role. It is the only file in this scope that holds more than one role, and only because of that limit. Where files can be split, they are: the board is one file per layer (CTX-049).
+One limit shapes the split. Claude Code's checker lets the `$` object be passed only to top-level functions of the module's own file (T8, `claude plugin validate`). So every `$` call has to live in `hooks/register.ts`. That file is classified by section. Each section starts with a comment naming its role. It is the only file in this scope that holds more than one role, and only because of that limit. `hooks/transformer.ts` uses no `$`, so it can be a file of its own. Where files can be split, they are: the board is one file per layer (CTX-049).
 
 | File or section | Role | What lives there |
 |---|---|---|
@@ -262,9 +276,10 @@ One limit shapes the split. Claude Code's checker lets the `$` object be passed 
 | `hooks/register.ts`, Controller | Controller | The `tool.call` and `turn.complete` handlers: pass the call on, then hand the result to the Service. It calls only the Service |
 | `hooks/register.ts`, Service | Service | The conductor. For each waiting row it runs the steps in order: clean and hide secrets, the model's look, the bare row if anything failed, the last look, and only then the write. It reaches the waiting rows and the board through the Manager, and the two outside systems through the Gateway. It holds no rule of its own. It passes `$` on and never calls anything on it |
 | `hooks/register.ts`, Manager | Manager | The waiting rows: add, keep, write oldest first, drop past the waiting limit (R6) and count the drops (R14), one write at a time. It does what the Service tells it, hands every read and write to the Connector, and never calls the Service |
-| `hooks/register.ts`, Gateway | Gateway | The two things that come from outside systems: the model's look (R13) and the `get_session` lookup (R8). It hands each ask to the Connector and gives the Service the answer. It saves nothing, and never calls the Service or the Manager |
+| `hooks/register.ts`, Gateway | Gateway | The two things that come from outside systems: the model's look (R13) and the `get_session` lookup (R8). It hands each ask to the Connector, has the Transformer read the raw reply, and gives the Service only the Transformer's answer. It saves nothing, and never calls the Service or the Manager |
 | `hooks/register.ts`, Connector | Connector | The only code that calls `$.store`, `$.tool.call`, `$.mcp.call` and the one `$.model` call (R13). Right before `$.tool.call` it makes the second compare (R8), as its own code |
-| `hooks/row.ts` | Support of the Service | Every rule, as pure functions the Service section calls: which call owes a row, its state and preview, the row's shape, reading the lookup's answer. The safety check's pure parts: the last look, the row shape, cleaning, the secret rule, the bare row, and reading the model's answer (R8, R11 to R13). Pure: no imports, no file, network, clock or environment |
+| `hooks/transformer.ts` | Transformer | Outside text to the plugin's own shapes, as two pure functions only the Gateway section calls: reading the model's answer, and reading the `get_session` lookup's answer. Pure: no `$`, no file, network, clock or environment. It imports nothing but types from `hooks/row.ts` |
+| `hooks/row.ts` | Support of the Service | Every rule, as pure functions the Service section calls: which call owes a row, its state and preview, the row's shape. The safety check's pure parts: the last look, the row shape, cleaning, the secret rule, the bare row, and what each answer of the model's look does to a row (R8, R11 to R13). Pure: no imports, no file, network, clock or environment |
 | `hooks/row.ts`, types | Model | The shapes of a waiting row, a row and a checked call |
 
 Who calls the safety check (settles OPEN-010, the planning thread's answer, 2026-11-22):
@@ -275,7 +290,7 @@ Who calls the safety check (settles OPEN-010, the planning thread's answer, 2026
 - **The door is kept by the types and a test.** The last look returns a checked call. It is a branded type that only the last look in `hooks/row.ts` can make. The Manager's and the Connector's write functions accept only that type. TypeScript compares shapes and a cast would get around the brand, so the source test (Section 3) fails on any cast to the checked call type outside `hooks/row.ts`.
 - Only the Service section calls the functions in `hooks/row.ts`. If another section used them, they would be shared support and the policy says to reclassify (3.1). So the Connector's second compare (R8, approved by Josh, CTX-051) is the Connector's own code.
 - The types in `hooks/row.ts` are Models. They hold no reference to the functions, because a Model must not depend on support (3.1).
-- No file is added for the safety code.
+- No file is added for the safety rules. They stay in `hooks/row.ts`. One file is added for reading outside text, `hooks/transformer.ts` (see "The Transformer" below).
 
 The Gateway (settles OPEN-015, Josh, CTX-052):
 
@@ -285,7 +300,23 @@ The Gateway (settles OPEN-015, Josh, CTX-052):
 - Saving rows does not move. It stays on the road Service, Manager, Connector. The waiting rows are the plugin's own data.
 - The first question to Josh, at 12:45Z, read that the Gateway "owns every save". That wording was wrong and is not what was decided (CTX-051).
 - The Gateway does not decide what happens to a row. That stays with the Service (policy 5.5: no workflow decisions).
-- Not decided here: in what shape the Gateway hands its answers to the Service. See OPEN-018.
+- In what shape the Gateway hands its answers to the Service: see "The Transformer" below.
+
+The Transformer (settles OPEN-018, Josh, CTX-055):
+
+- A new file, `hooks/transformer.ts`, role Transformer. It holds the two reading functions that this record kept in `hooks/row.ts` until 2026-11-23: reading the model's answer, and reading the `get_session` lookup's answer.
+- Picture a mailroom. Outside mail is opened there and nowhere else. The rest of the building only ever gets a short printed slip.
+- It is pure: no `$`, no file, network, clock or environment. It may import types from `hooks/row.ts`, which are Models, and nothing else. It never throws. So it can be a file of its own (CTX-049).
+- Only the Gateway section calls it. The road: Service, then Gateway, then Connector, and back up through the Transformer.
+- What the Gateway hands the Service for the model's look: one of `fine`, `hide-title`, `hide-preview`, `hide-both`, `unreadable`. Nothing else. It is the exact word after trimming, or `unreadable`: an empty reply, a longer reply and a word not on the list are all `unreadable`.
+- What the Gateway hands the Service for the lookup: the title and the project name as plain text, or `not-found`.
+- When the model gave no answer at all (too slow, failed, skipped), there is no reply to read. The Gateway tells the Service so, with the cause for the log (R13, R14).
+- The rules do not move. What each answer does to a row stays in `hooks/row.ts`, called only by the Service: `unreadable` and no answer hide both and mark `hidden-noai` (R13). The title and project the lookup gives are still cleaned and checked there (R12).
+- Who may call `hooks/row.ts` does not change. Two functions leave it.
+- Why it is the safer way: the model's reply and the lookup's reply are outside text. With this split the raw reply stops at the Gateway. The Service, which decides what happens to a row, never holds it, so it cannot log it, save it or put it in a row by mistake. The source test (Section 3) fails if the Service section names a raw answer type.
+- Why the policy asks for it: a Gateway "exposes application Models only" (5.5). Turning an outside shape into an application shape belongs to a Transformer, and "no other role gets a mapping exception" (Section 8). The allow-list has Gateway to Transformer (6.1).
+- The way not taken: the Connector returns the reply as text, the Gateway passes it up, and the Service reads it with `hooks/row.ts`. No new file and no new role, but the raw outside text passes through the Service. It is simpler, not safer (CTX-041).
+- Not allowed: the Gateway section reading the text itself. Section 8 of the policy gives that job to no role but the Transformer.
 
 The board is a page, `board/index.html`, that holds markup and styles only, and seven TypeScript files, one per role (CTX-049, CTX-050). Each file starts with a comment naming its role. The table describes the files as merged in pull request 9.
 
@@ -317,7 +348,7 @@ The delete lock, `ExpiredIds` (IMP-005):
 - TypeScript compares shapes, and a cast would get around the type. A test in `board/service.test.ts` fails when any shipped board file casts to `ExpiredIds`, uses `any`, casts through `unknown` or `never`, or switches a type check off, and when any file other than `board/model.ts` and `board/service.ts` names the lock's property.
 - It is the same idea as the plugin's checked call above.
 
-Roles this scope does not use: Domain, Provider (first-party), Contract and Entity. The plugin has no Transformer and no Client. The board has no Controller and no Gateway. With no Domain types, each Service holds its rules, as policy Section 5.3 allows.
+Roles this scope does not use: Domain, Provider (first-party), Contract and Entity. The plugin has no Client. The board has no Controller and no Gateway. With no Domain types, each Service holds its rules, as policy Section 5.3 allows.
 
 Dependencies used. All are inside the policy's allow-list (6.1). Two earlier texts of this table listed edges that are gone: Controller to Manager, and the board's Client to Connector (OPEN-017).
 
@@ -328,7 +359,7 @@ Dependencies used. All are inside the policy's allow-list (6.1). Two earlier tex
 | Client | Service, Model |
 | Service | Manager, Gateway, Transformer, Model |
 | Manager | Connector, Model |
-| Gateway | Connector, Model |
+| Gateway | Connector, Transformer, Model |
 | Connector | Model |
 | Transformer | Model |
 
@@ -432,7 +463,7 @@ From T8, "What can still lose a row", the T8 reviewer, and a read of `hooks/regi
 - **OPEN-013**: Settled 2026-11-22 12:46Z (CTX-051, "Yes to all five."): a board refusal because the row already exists counts as written. Only that one refusal counts. Any other keeps the row waiting, and so does any doubt. See R8, "Already there counts as written". Before this rule, a write that landed but reported a failure would have waited at the front of the line forever.
 - **OPEN-014**: Settled 2026-11-22 by the planning thread, as this point asked, in the safety design (REF-011, section 11, A7). The let-through for Claude's own ids matches the whole id, in the exact length real ids of that kind have, so a key glued to `session_` is hidden. When more than one `check` value applies, the first in this order wins: `bare`, `hidden`, `hidden-ai`, `hidden-noai`, `ok`. A look skipped near turn end (R7) hides the text and gives `hidden-noai`.
 - **OPEN-017**: Settled 2026-11-22 (CTX-050), both halves. At 12:43Z Josh chose (a): "Add helper." The board has `board/manager.ts`, role Manager, and its road is Client, Service, Manager, Connector. At 12:52Z, on a startup file: "Yeah, we should definitely." The board has `board/main.ts`, role Composition Root (policy Section 9). Both are merged in pull request 9. See Section 5.
-- **OPEN-018** (found while writing `RUL-3206`, for the planning thread): in what shape the Gateway hands its answers to the Service. This record keeps the rules that read the lookup's answer and the model's answer in `hooks/row.ts`, and only the Service calls them (Section 5). The policy says a Gateway hands up the application's own shapes, not the outside system's (5.5). The two fit if the Gateway's answer is already a plain application shape, or if the reading moves. Neither is decided here. It must be settled before any Gateway code. If the answer changes who may call `hooks/row.ts`, it needs Josh's yes.
+- **OPEN-018**: Settled 2026-11-23 14:11Z (CTX-055): a Transformer file, `hooks/transformer.ts`, reads the model's answer and the lookup's answer, and only the Gateway calls it. The Gateway hands the Service one of `fine`, `hide-title`, `hide-preview`, `hide-both`, `unreadable` for the look, and the title and project as text, or `not-found`, for the lookup. Josh: "Yes, if it is the safer option, I agree." The rules for what each answer does stay in `hooks/row.ts`, and who may call that file does not change. See Section 5, "The Transformer". Found while writing `RUL-3206`.
 - **OPEN-019** (found in review of `RUL-3206`, for the planning thread): the startup file asks for the database before it wires the parts. `board/main.ts` waits for `openBoard()`, which calls `claude.use('db')`, and the answer decides the wiring: no database, no Service. Policy 5.13 says a Composition Root does no external I/O beyond the framework's own startup setup, and that remote calls at startup run after the parts are built. Calling the board's own Connector is allowed (policy Section 7). Whether `claude.use('db')` counts as framework setup or as a call to the host is not shown either way. So this record does not say 5.13 is met. A fix would be a code change, with its own issue and Josh's yes.
 
 ## Alternatives Considered
