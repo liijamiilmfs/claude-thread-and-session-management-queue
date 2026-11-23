@@ -2,7 +2,7 @@
 // When the thread tells the person something, this code writes the thread's row to the board itself.
 // It passes every call on unchanged and never refuses one. The model writes nothing.
 // Every `$` call lives in this file. Each section below starts with a comment naming its role (ADR-0001, Section 5).
-import { LOOK_MS, afterLook, bareCall, draft, isThread, landed, lastLook, lookAt, rowCall, rowFor, threadOf } from './row.ts';
+import { LOOK_MS, afterLook, bareCall, draft, isThread, landed, lastLook, lookAt, rowCall, rowFor, settle, threadOf } from './row.ts';
 import type { CheckedCall, Draft, LookAnswer, Names } from './row.ts';
 
 type Args = Record<string, unknown>;
@@ -43,8 +43,8 @@ export function register(on: On): void {
 // ---- Controller: passes the call on, then hands the result to the Service. It calls only the Service. ----
 
 const TURN_END_WAIT_MS = 8000;
-// Room for the board write after the last look that may start.
-const LOOK_SPARE_MS = 500;
+// Room after the last look that may start: half a second for the Connector's own limit on the look, half a second for the board write.
+const LOOK_SPARE_MS = 1000;
 
 // The thread id comes from the environment in this run, never from the note.
 async function thisThread($: Api): Promise<string> {
@@ -57,7 +57,11 @@ async function onToolCall($: Api, e: Event, next: Next): Promise<unknown> {
   try {
     // A call that was refused or failed told the person nothing (R2).
     const failed = typeof out === 'object' && out !== null && (('deny' in out && out.deny !== undefined) || ('isError' in out && Boolean(out.isError)));
-    if (!failed) await rowOwed($, e.tool, e, await thisThread($), await $.clock.now());
+    if (!failed) {
+      // A new reply: nobody is waiting on the turn's end, so the model may be asked again.
+      looksOpen(true);
+      await rowOwed($, e.tool, e, await thisThread($), await $.clock.now());
+    }
   } catch (err) {
     log($, 'row not queued: ' + String(err).slice(0, 200));
   }
@@ -71,18 +75,19 @@ async function onTurnComplete($: Api, e: Event, next: Next): Promise<unknown> {
     if (!e.agentId) {
       const thread = await thisThread($);
       const now = await $.clock.now();
+      looksOpen(true);
       // A look that starts after this point could run past the wait, so from here on it is skipped (R13).
+      // It stays skipped after the wait is over: a pass still running then must not ask the model once the turn has ended.
       const lastLookStart = $.clock.after(TURN_END_WAIT_MS - LOOK_MS - LOOK_SPARE_MS, () => looksOpen(false));
       await new Promise<void>((done) => {
-        const timer = $.clock.after(TURN_END_WAIT_MS, done);
-        void writeWaiting($, thread, now).then(() => { timer.cancel(); done(); });
+        // The wait gave up with the pass still running: no look may start from here on.
+        const timer = $.clock.after(TURN_END_WAIT_MS, () => { looksOpen(false); done(); });
+        void writeWaiting($, thread, now).then(() => { timer.cancel(); lastLookStart.cancel(); done(); });
       });
-      lastLookStart.cancel();
     }
   } catch (err) {
     log($, 'turn end pass failed: ' + String(err).slice(0, 200));
   }
-  looksOpen(true);
   return next(e);
 }
 
@@ -91,6 +96,8 @@ async function onTurnComplete($: Api, e: Event, next: Next): Promise<unknown> {
 
 let pass: Promise<void> | undefined;
 let again = false;
+// The latest time the Controller handed over. A pass can outlast the moment it started, and each row is checked against the time now.
+let latest = 0;
 let looking = true;
 
 // Near the end of the turn end wait the model's look is skipped, and the text is hidden instead.
@@ -103,18 +110,27 @@ async function rowOwed($: Api, tool: string, args: Args, thread: string, now: nu
   const told = rowFor(tool, args);
   // A call that owes no row, or not a cloud thread (R9): do nothing.
   if (!told || !isThread(thread)) return;
+  await settleNote($, thread, now);
   const at = await keep($, thread, now, { state: told.state, preview: told.preview });
   if (told.hid) log($, 'row ' + thread + '.' + at + ' queued, preview hidden: ' + told.hid);
   // Not awaited: the thread's own call does not wait on the board (R5).
   void writeWaiting($, thread, now);
 }
 
+// Rows an earlier run left in the note are settled once, before anything else is kept or written (S6):
+// cleaned, cut down to the known fields, and given a time that stays the same on every try. Then the note is saved again.
+async function settleNote($: Api, thread: string, now: number): Promise<void> {
+  const left = await leftByEarlierRun($);
+  if (left.length) await takeBack($, left.map((row) => settle(row, thread, now, freshTime(now))));
+}
+
 // One pass at a time, so a row is never written twice. A request that arrives mid-pass makes the pass run once more.
 function writeWaiting($: Api, thread: string, now: number): Promise<void> {
+  latest = Math.max(latest, now);
   if (pass) { again = true; return pass; }
   pass = (async () => {
     try {
-      do { again = false; await writePass($, thread, now); } while (again);
+      do { again = false; await writePass($, thread); } while (again);
     } catch (err) {
       log($, 'write pass failed, rows kept: ' + String(err).slice(0, 200));
     } finally {
@@ -125,8 +141,9 @@ function writeWaiting($: Api, thread: string, now: number): Promise<void> {
 }
 
 // Writes every waiting row, oldest first. Stops at the first one the board does not take and keeps it for the next try.
-async function writePass($: Api, thread: string, now: number): Promise<void> {
+async function writePass($: Api, thread: string): Promise<void> {
   if (!isThread(thread)) return;
+  await settleNote($, thread, latest);
   let names: Names | undefined;
   for (let waiting = await oldest($); waiting.some; waiting = await oldest($)) {
     const carried = droppedCount();
@@ -135,7 +152,7 @@ async function writePass($: Api, thread: string, now: number): Promise<void> {
       names = await sessionNames($);
       if (names === 'not-found') log($, 'title lookup gave nothing, the thread id stands in');
     }
-    const sent = await writeRow($, thread, now, waiting.row, carried, names);
+    const sent = await writeRow($, thread, latest, waiting.row, carried, names);
     if (!sent) return;
     await written($, waiting.row, carried);
   }
@@ -166,12 +183,12 @@ async function writeRow($: Api, thread: string, now: number, waiting: unknown, c
       return false;
     }
     const out = await write($, checked);
-    if (out === SECOND_COMPARE_FAILED) {
+    if (out === NOT_SENT) {
       log($, 'row ' + checked.doc_id + ' not sent: the second compare failed' + (first ? ', sending a bare row' : ', row kept'));
       why = 'the second compare failed';
       continue;
     }
-    const on = landed(out);
+    const on = landed(out, checked.doc_id);
     const tail = ', state ' + checked.data.state + ', check ' + checked.data.check + (why && ' (' + why + ')');
     if (on === 'written') log($, 'row ' + checked.doc_id + ' written by the plugin' + tail);
     else if (on === 'already there') log($, 'row ' + checked.doc_id + ' was already on the board, counted as written' + tail);
@@ -200,7 +217,7 @@ async function looked($: Api, thread: string, row: Draft): Promise<Draft> {
 // Why the board did not take the row, for the log. Up to 200 characters of the board's own words.
 function refusal(out: unknown): string {
   const o: Args = typeof out === 'object' && out !== null ? (out as Args) : {};
-  return String(o.deny ?? o.text ?? out).slice(0, 200);
+  return String(o.deny ?? o.threw ?? o.text ?? out).slice(0, 200);
 }
 
 // ---- Manager: the waiting rows. It does what the Service tells it and hands every read and write to the Connector. ----
@@ -208,8 +225,9 @@ function refusal(out: unknown): string {
 // A build made before RUL-3185 keeps at most 20.
 const MAX_WAITING = 20;
 // Rows not yet on the board, oldest first. The note holds the same list, so a restart on the same machine loses none.
-// They are kept as read: the note is not trusted, so the Service checks each one at the door.
+// The note is not trusted: rows read from it wait apart until the Service has settled them, and the Service checks each row again at the door.
 const waitingRows: unknown[] = [];
+const fromNote: unknown[] = [];
 let dropped = 0;
 let loaded: Promise<void> | undefined;
 let lastAt = 0;
@@ -220,13 +238,25 @@ function load($: Api): Promise<void> {
     try {
       const kept = await readNote($, 'waiting');
       const count = await readNote($, 'dropped');
-      if (Array.isArray(kept)) waitingRows.unshift(...kept);
+      if (Array.isArray(kept)) fromNote.push(...kept);
       if (typeof count === 'number' && count > 0) dropped += Math.min(Math.floor(count), 9999);
-      trim($);
     } catch (err) {
       log($, 'note not read: ' + String(err).slice(0, 200));
     }
   })());
+}
+
+// The rows an earlier run left, as read. Handed out once.
+async function leftByEarlierRun($: Api): Promise<unknown[]> {
+  await load($);
+  return fromNote.splice(0);
+}
+
+// The settled rows go to the front of the line, since they are older, and the note is saved over with them.
+async function takeBack($: Api, rows: unknown[]): Promise<void> {
+  waitingRows.unshift(...rows);
+  trim($);
+  await save($);
 }
 
 // Past the waiting limit the oldest row is given up, and the drop is counted and logged (R6, R14).
@@ -279,9 +309,13 @@ async function written($: Api, row: unknown, carried: number): Promise<void> {
   await save($);
 }
 
+// The Manager's own answer when the Connector's second compare stopped the call.
+const NOT_SENT = 'not sent';
+
 // The write accepts only a call the last look passed.
-function write($: Api, call: CheckedCall): Promise<unknown> {
-  return send($, call);
+async function write($: Api, call: CheckedCall): Promise<unknown> {
+  const out = await send($, call);
+  return out === SECOND_COMPARE_FAILED ? NOT_SENT : out;
 }
 
 // ---- Gateway: the two outside systems, the model's look and the get_session lookup. It saves nothing and decides nothing about a row. ----
@@ -322,7 +356,8 @@ async function send($: Api, call: CheckedCall): Promise<unknown> {
   try {
     return await $.tool.call(call);
   } catch (err) {
-    return { isError: true, text: String(err) };
+    // Marked as thrown, so it can never pass for the board's own refusal.
+    return { threw: String(err) };
   }
 }
 

@@ -70,9 +70,11 @@ export const HIDDEN_PART = '[hidden]';
 // Each pattern is a single pass with no nested repeats, and the text is at most 2,000 characters.
 const WHOLE_FIELD: [string, RegExp][] = [
   ['private key', /-----BEGIN [A-Z0-9 ]*PRIVATE KEY/],
-  // Strict rule: the value may follow a colon, an equals sign or plain words ("the password is ...").
-  // No word edge is asked for, so "DB_PASSWORD=" and "SECRET_KEY:" count too.
-  ['secret word', /(?:pass(?:word|code|phrase)|passwd|pwd|secret|token|api[ _-]?key|credential)[A-Za-z0-9_]{0,20}(?:\s*[:=]|\s+(?:is|was|are)\b)\s*\S/i],
+  // Strict rule: the value may follow a colon, an equals sign, a dash or plain words ("the password for prod is ...").
+  // Up to five words may sit between the word and its sign. No word edge is asked for, so "DB_PASSWORD=" and "SECRET_KEY:" count too.
+  ['secret word', /(?:pass(?:word|code|phrase)|passwd|pwd|secret|token|api[ _-]?key|credential)[A-Za-z0-9_]{0,20}(?:\s+[^\s:=]+){0,5}?(?:\s*[:=]|\s+[-\u2013\u2014]\s|\s+(?:is|was|are)\b)\s*\S/i],
+  // "pw" on its own is short for password. Anything after it counts.
+  ['secret word', /(?<![A-Za-z0-9])pw(?![A-Za-z0-9])\s*[:=-]?\s*\S/i],
 ];
 
 // Shapes that end where the word ends. Only the word they sit in is hidden.
@@ -182,6 +184,8 @@ const timeOk = (at: unknown, now: number): at is number =>
 // The note is not trusted: every part is checked, and all text is cleaned again.
 export function draft(waiting: unknown, thread: string, now: number, title: unknown, project: unknown): Draft | string {
   if (!isRecord(waiting) || !isRecord(waiting.told)) return 'damaged row';
+  // Settled as a bare row when it was read back from the note. Only a reason from the fixed list is repeated.
+  if (waiting.bare !== undefined) return typeof waiting.bare === 'string' && BARE_WHY.includes(waiting.bare) ? waiting.bare : 'damaged row';
   if (waiting.thread !== thread) return 'another thread id';
   if (!timeOk(waiting.at, now)) return 'time out of range';
   const { state, preview: kept } = waiting.told;
@@ -260,9 +264,27 @@ export function rowCall(thread: string, row: Draft, build: unknown, dropped: unk
 // The bare row: this thread's id, a time and the build. No free text. It goes out when a row cannot go as it is.
 // It keeps the row's own state and time when they can be trusted. Otherwise "review" and the fresh time, which is never used twice.
 export function bareCall(thread: string, waiting: unknown, now: number, fresh: number, build: unknown, dropped: unknown): RowCall {
+  const { at, state } = bareOf(waiting, now, fresh);
+  return callFor(thread, at, { title: thread, state, preview: BARE_PREVIEW, check: 'bare' }, build, dropped);
+}
+
+function bareOf(waiting: unknown, now: number, fresh: number): { at: number; state: string } {
   const own = isRecord(waiting) ? waiting : {};
   const state = isRecord(own.told) && typeof own.told.state === 'string' && ROW_STATES.includes(own.told.state) ? own.told.state : 'review';
-  return callFor(thread, timeOk(own.at, now) ? own.at : fresh, { title: thread, state, preview: BARE_PREVIEW, check: 'bare' }, build, dropped);
+  return { at: timeOk(own.at, now) ? own.at : fresh, state };
+}
+
+// Why a row read back from the note goes out bare. Fixed words, so nothing from the note is repeated in a log.
+const BARE_WHY = ['damaged row', 'another thread id', 'time out of range', 'unknown state'];
+
+// A row read back from the note, made safe to keep (S6): only the known fields and a cleaned preview.
+// A row that cannot go as it is becomes a bare row here, once, with its time fixed. So every later try
+// writes the same row id, and a write whose answer was lost is not written twice. Settling twice changes nothing.
+export function settle(waiting: unknown, thread: string, now: number, fresh: number): Waiting & { bare?: string } {
+  const row = draft(waiting, thread, now, '', '');
+  if (typeof row !== 'string') return { thread, at: row.at, told: { state: row.state, preview: row.preview } };
+  const { at, state } = bareOf(waiting, now, fresh);
+  return { thread, at, told: { state, preview: BARE_PREVIEW }, bare: row };
 }
 
 // ---- The last look (R8) ----
@@ -304,10 +326,11 @@ export function lastLook(call: unknown, thread: string): CheckedCall | undefined
   }
 }
 
-// True when the row is on the board: the write went through, or the board says a row with this id is already there.
-// Only that one refusal counts. A deny, any other error and any doubt keep the row waiting.
-export function landed(out: unknown): 'written' | 'already there' | false {
-  if (!isRecord(out) || out.deny !== undefined) return false;
+// True when the row is on the board: the write went through, or the board says this very row is already there (A2).
+// Only the board's own refusal for this row id counts, as seen live: "turns/<id> already exists and this write carried no if_version".
+// A deny, a thrown error, an error about another row, any other error and any doubt keep the row waiting.
+export function landed(out: unknown, docId: string): 'written' | 'already there' | false {
+  if (!isRecord(out) || out.deny !== undefined || out.threw !== undefined) return false;
   if (!out.isError) return 'written';
-  return typeof out.text === 'string' && out.text.includes('already exists') ? 'already there' : false;
+  return typeof out.text === 'string' && out.text.includes(COLLECTION + '/' + docId + ' already exists and this write carried no if_version') ? 'already there' : false;
 }

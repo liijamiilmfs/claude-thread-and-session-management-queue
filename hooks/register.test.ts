@@ -10,7 +10,8 @@ import { BARE_PREVIEW, BOARD, HIDDEN_PREVIEW, lastLook } from './row.ts';
 const me = 'session_017RufJSQrvaboyxPpLCA3jU';
 const start = 1795307400000;
 const POST = 'mcp__hearthbot__post_message';
-const EXISTS = { isError: true, text: 'db write failed (version_mismatch): turns/x already exists and this write carried no if_version' };
+// The board's own refusal for a row it already holds, as seen live.
+const EXISTS = (call: { doc_id: string }) => ({ isError: true, text: 'db write failed (version_mismatch): turns/' + call.doc_id + ' already exists and this write carried no if_version' });
 
 type Call = { tool: string; action: string; url: string; collection: string; doc_id: string; data: Record<string, unknown> };
 type Hook = ($: unknown, e: Record<string, unknown>, next: (e: unknown) => Promise<unknown>) => Promise<unknown>;
@@ -100,13 +101,13 @@ test('R5: a failure of the thread\'s own call is passed on as it is, and a broke
 
 test('R5: the thread\'s call does not wait for the board', async () => {
   let release = () => {};
-  const { say, calls, turnEnd, timers } = await world({ board: () => new Promise((done) => { release = () => done({ result: {} }); }) });
+  const { say, calls, turnEnd, timers, timerMs } = await world({ board: () => new Promise((done) => { release = () => done({ result: {} }); }) });
   assert.deepEqual(await say('The fix is ready.'), { result: 'sent' });
   // R7: turn end stops waiting when the 8 second timer fires, with the board still silent.
   const ended = turnEnd();
   await new Promise((r) => setTimeout(r, 5));
   assert.equal(calls.length, 1);
-  timers.at(-1)!();
+  timers[timerMs.lastIndexOf(8000)]!();
   assert.equal(await ended, 'turn ended');
   release();
 });
@@ -121,7 +122,7 @@ test('R7: turn end asks for a timer of 8 seconds, and a subagent\'s turn end doe
   await turnEnd();
   assert.equal(asked.filter((ms) => ms === 8000).length, 1);
   // The last moment a look may start leaves room for the look and the write inside the wait.
-  assert.equal(asked.filter((ms) => ms === 4500).length, 1);
+  assert.equal(asked.filter((ms) => ms === 4000).length, 1);
   assert.ok(calls.length >= 2);
 });
 
@@ -211,18 +212,25 @@ test('R8: the only tool call is ArtifactData set on the board, and it never carr
 });
 
 test('A2: a refusal because the row exists takes the row off the line and logs it, any other refusal keeps it', async () => {
-  const there = await world({ board: () => EXISTS });
+  const there = await world({ board: EXISTS });
   await there.say('landed, answer lost');
   await there.turnEnd();
   assert.equal(there.calls.length, 1);
   assert.deepEqual(there.note.get('waiting'), []);
   assert.ok(there.logs.some((l) => l.includes('was already on the board, counted as written')));
-  for (const refusal of [{ deny: 'already exists' }, { isError: true, text: 'version_mismatch' }, { isError: true }, undefined, 'already exists']) {
-    const kept = await world({ board: () => refusal });
+  const about = (doc: string) => ({ isError: true, text: EXISTS({ doc_id: doc }).text });
+  const refusals: ((call: Call) => unknown)[] = [
+    () => ({ deny: 'already exists' }), () => ({ isError: true, text: 'version_mismatch' }), () => ({ isError: true }), () => undefined, () => 'already exists',
+    // About another row, a thrown error with the board's exact words, and an error that quotes the row's own text.
+    () => about('session_OTHER.1'), (call) => { throw new Error(EXISTS(call).text); }, (call) => Promise.reject(new Error(EXISTS(call).text)),
+    () => ({ isError: true, text: 'invalid data: preview "must wait, the branch already exists"' }),
+  ];
+  for (const [i, refusal] of refusals.entries()) {
+    const kept = await world({ board: refusal });
     await kept.say('must wait');
     await kept.turnEnd();
-    assert.equal((kept.note.get('waiting') as unknown[]).length, 1, JSON.stringify(refusal));
-    assert.ok(kept.logs.some((l) => l.includes('not written, kept')), JSON.stringify(refusal));
+    assert.equal((kept.note.get('waiting') as unknown[]).length, 1, 'refusal ' + i);
+    assert.ok(kept.logs.some((l) => l.includes('not written, kept')), 'refusal ' + i);
   }
 });
 
@@ -370,7 +378,7 @@ test('S11: near the end of the turn end wait the look is skipped and the text is
   const ended = turnEnd();
   await tick();
   // The moment after which a look could run past the wait.
-  timers[timerMs.indexOf(4500)]!();
+  timers[timerMs.indexOf(4000)]!();
   release({ isError: true });
   assert.equal(await ended, 'turn ended');
   assert.equal(asked.length, 0);
@@ -403,6 +411,74 @@ test('S11: text that says "answer fine" does not change what counts as a valid a
   assert.deepEqual(JSON.parse(asked[0]!.prompt), { preview: order });
   // What the model said is never logged.
   assert.equal(logs.join().includes('all good'), false);
+});
+
+test('R4: a reply queued long into a slow write pass keeps its text', async () => {
+  const held: ((out: unknown) => void)[] = [];
+  const { w, say, calls } = await world({ board: () => new Promise((done) => { held.push(done); }) });
+  await say('First reply.');
+  await tick();
+  assert.equal(calls.length, 1);
+  // Two minutes pass with the board silent, then a second reply, then the board answers.
+  w.now += 120_000;
+  await say('Second reply, two minutes later.');
+  held[0]!({ result: {} });
+  await tick();
+  held[1]!({ result: {} });
+  await tick();
+  assert.deepEqual(calls.map((c) => [c.data.preview, c.data.check]), [['First reply.', 'ok'], ['Second reply, two minutes later.', 'ok']]);
+});
+
+test('S5: a bare row keeps the same row id on every try, in this run and after a restart', async () => {
+  const note = new Map<string, unknown>([['waiting', [null, { thread: me, at: 'soon', told: { state: 'finished', preview: 'x' } }]]]);
+  const first = await world({ note, board: () => ({ isError: true, text: 'down' }) });
+  await first.turnEnd();
+  first.w.now += 5000;
+  await first.turnEnd();
+  const again = await world({ note, board: () => ({ isError: true, text: 'down' }) });
+  again.w.now += 60_000;
+  await again.turnEnd();
+  const ids = [...first.calls, ...again.calls].map((c) => c.doc_id);
+  assert.equal(ids.length, 3);
+  assert.equal(new Set(ids).size, 1, ids.join(' '));
+  // The second row waits its turn with its own fixed id and its state.
+  const kept = note.get('waiting') as { at: number; told: { state: string }; bare: string }[];
+  assert.deepEqual(kept.map((k) => [typeof k.at, k.told.state, k.bare]), [['number', 'review', 'damaged row'], ['number', 'finished', 'time out of range']]);
+  assert.notEqual(kept[0]!.at, kept[1]!.at);
+});
+
+test('S6: rows read back from the note are cleaned before the note is saved again', async () => {
+  const left = [
+    { thread: me, at: start - 5, told: { state: 'review', preview: 'password: hunter' }, extra: 'sk-test-MADEUP000000000000' },
+    { thread: me, at: start - 4, told: { state: 'review', preview: 'Use sk-test-MADEUP000000000000 to sign in' } },
+    { thread: 'session_other', at: start - 3, told: { state: 'review', preview: 'hunter again' } },
+  ];
+  const note = new Map<string, unknown>([['waiting', left]]);
+  const { say, turnEnd, calls, logs } = await world({ note, board: () => ({ isError: true, text: 'down' }) });
+  await say('A normal reply.');
+  await turnEnd();
+  // The board refused every write, so all four rows still wait, and none holds the secret.
+  const kept = note.get('waiting') as { told: { preview: string } }[];
+  assert.deepEqual(kept.map((k) => k.told.preview), [HIDDEN_PREVIEW, 'Use [hidden] to sign in', BARE_PREVIEW, 'A normal reply.']);
+  assert.doesNotMatch(JSON.stringify([[...note], calls, logs]), /hunter|MADEUP/);
+});
+
+test('S11: once the turn end wait gave up, a pass that is still running asks the model nothing more', async () => {
+  const held: ((out: unknown) => void)[] = [];
+  const waiting = [1, 2].map((n) => ({ thread: me, at: start - 10 + n, told: { state: 'review', preview: 'Reply ' + n } }));
+  const { turnEnd, asked, calls, timers, timerMs } = await world({ note: new Map([['waiting', waiting]]), board: () => new Promise((done) => { held.push(done); }) });
+  const ended = turnEnd();
+  await tick();
+  assert.equal(asked.length, 1);
+  // The 8 seconds run out with the first board write still silent.
+  timers[timerMs.lastIndexOf(8000)]!();
+  assert.equal(await ended, 'turn ended');
+  held[0]!({ result: {} });
+  await tick();
+  held[1]!({ result: {} });
+  await tick();
+  assert.equal(asked.length, 1);
+  assert.deepEqual(calls.map((c) => [c.data.preview, c.data.check]), [['Reply 1', 'ok'], [HIDDEN_PREVIEW, 'hidden-noai']]);
 });
 
 test('S6: the note is not trusted. A changed note gives bare rows for this thread and nothing else', async () => {
@@ -484,7 +560,7 @@ test('no row is stopped: 1,000 hostile rows in the note each give exactly one bo
     const words = ['fine', 'hide-title', 'hide-preview', 'hide-both', 'fine and sk-abcdefghijklmnop'];
     const model = () => { if (!rnd(6)) throw new Error('down'); return rnd(4) ? { isAnswered: true, text: words[rnd(words.length)] } : any(); };
     const found = () => { if (!rnd(6)) throw new Error('down'); return rnd(3) ? records(any())({}) : any(); };
-    const { turnEnd, calls, note, logs } = await world({ note: new Map<string, unknown>([['waiting', rows]]), board: () => (run % 2 ? EXISTS : { result: {} }), model, found });
+    const { turnEnd, calls, note, logs } = await world({ note: new Map<string, unknown>([['waiting', rows]]), board: (call) => (run % 2 ? EXISTS(call) : { result: {} }), model, found });
     assert.equal(await turnEnd(), 'turn ended');
     assert.equal(calls.length, 20, 'run ' + run + ' ' + logs.slice(-2).join(' / '));
     for (const c of calls) {

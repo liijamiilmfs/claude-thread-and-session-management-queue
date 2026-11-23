@@ -94,6 +94,8 @@ test('register.ts imports only row.ts and transformer.ts', () => {
 test('the Service passes $ on and never calls anything on it, and never holds a raw reply', () => {
   assert.equal(count(sections.Service!, '$.'), 0);
   for (const raw of ['RawLook', 'RawSession', 'readLook', 'readSession', 'ask(', 'session(']) assert.equal(count(sections.Service!, raw), 0, raw);
+  // It reaches the Connector only through the Manager, so it never names anything of the Connector's.
+  assert.equal(count(sections.Service!, 'SECOND_COMPARE_FAILED'), 0);
 });
 
 test('the Manager, the Gateway and the Connector hold no rule and never call the Service', () => {

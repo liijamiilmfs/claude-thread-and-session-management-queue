@@ -98,11 +98,33 @@ test('the row write: no project field when the name was not found, long names ar
   assert.equal(long.project!.length, 200);
 });
 
-test('a write counts as on the board when it went through or the row is already there, and nothing else does (A2)', () => {
-  assert.equal(landed({ result: {}, text: 'ok' }), 'written');
-  assert.equal(landed({ isError: true, text: 'db write failed (version_mismatch): turns/x already exists and this write carried no if_version' }), 'already there');
-  for (const kept of [{ isError: true, text: 'network error' }, { isError: true }, { isError: true, text: 7 }, { deny: 'refused by another plugin' }, { deny: 'already exists' }, undefined, null, 'already exists']) {
-    assert.equal(landed(kept), false, JSON.stringify(kept));
+test('a write counts as on the board when it went through or this very row is already there, and nothing else does (A2)', () => {
+  const id = me + '.1795307400000';
+  const exists = (doc: string) => 'db write failed (version_mismatch): turns/' + doc + ' already exists and this write carried no if_version';
+  assert.equal(landed({ result: {}, text: 'ok' }, id), 'written');
+  assert.equal(landed({ isError: true, text: exists(id) }, id), 'already there');
+  for (const kept of [{ isError: true, text: 'network error' }, { isError: true }, { isError: true, text: 7 }, { deny: 'refused by another plugin' }, { deny: exists(id) }, undefined, null, exists(id)]) {
+    assert.equal(landed(kept, id), false, JSON.stringify(kept));
+  }
+});
+
+test('A2: an error about another row does not count as written', () => {
+  const id = me + '.1795307400000';
+  for (const other of ['session_OTHER.1', me + '.1795307400001', 'x', id + '0']) {
+    assert.equal(landed({ isError: true, text: 'db write failed (version_mismatch): turns/' + other + ' already exists and this write carried no if_version' }, id), false, other);
+  }
+});
+
+test('A2: a thrown error does not count as written, whatever it says', () => {
+  const id = me + '.1795307400000';
+  assert.equal(landed({ threw: 'Error: turns/' + id + ' already exists and this write carried no if_version' }, id), false);
+  assert.equal(landed({ threw: 'x', isError: true, text: 'turns/' + id + ' already exists and this write carried no if_version' }, id), false);
+});
+
+test('A2: an error that only quotes words like "already exists" does not count as written', () => {
+  const id = me + '.1795307400000';
+  for (const text of ['The branch already exists', 'already exists', 'invalid data: preview "The branch already exists"', 'turns already exists and this write carried no if_version']) {
+    assert.equal(landed({ isError: true, text }, id), false, text);
   }
 });
 
@@ -154,6 +176,12 @@ const KEYS: [string, string][] = [
   ['secret word', 'DB_PASSWORD=hunter'],
   ['secret word', 'SECRET_KEY: abc'],
   ['secret word', 'mypassword is bluehorse'],
+  // From the review of pull request 17: a few words in between, a dash, and "pw".
+  ['secret word', 'The password for prod is hunter2'],
+  ['secret word', 'Password - hunter2'],
+  ['secret word', 'pw hunter2'],
+  ['secret word', 'PW: hunter2'],
+  ['secret word', 'the api key for the staging box was abc'],
   ['known key start', 'tasksk-abcdefghijklmnop'],
   ['long run', 'a1b2c3d4e5f6g7h8'],
 ];
@@ -200,7 +228,7 @@ test('S4: redaction takes the whole word, every secret, and holds after the row 
 });
 
 test('S4: plain text is not hidden', () => {
-  for (const text of ['The fix is ready.', 'Merged pull request 15 into dev', 'See https://claude.ai/code/' + me, 'Token limit raised to 200', 'Password reset page is live', 'Task-oriented risk-based review', '<b>bold</b> & "quotes"']) {
+  for (const text of ['The fix is ready.', 'Merged pull request 15 into dev', 'See https://claude.ai/code/' + me, 'Token limit raised to 200', 'Password reset page went live', 'Task-oriented risk-based review', '<b>bold</b> & "quotes"']) {
     assert.deepEqual(clean(text, 200), { text }, text);
   }
 });
