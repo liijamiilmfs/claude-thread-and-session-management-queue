@@ -161,7 +161,8 @@ Run `npm test` (Node's built-in test runner, files named `*.test.ts`) and `npm r
 | `format` | Not defined yet | Added by `RUL-3166` |
 | `lint` | `claude plugin validate .` | Needs the `claude` command. CI installs version 2.1.330, checked against a recorded hash, and the abilities test runs that exact file (`CLAUDE_BIN`). In CI a missing command fails the run. On other machines the test reports itself as skipped. |
 | `typecheck` | `npm run typecheck` | Runs `tsc`, emits nothing |
-| `test` | `npm test` | Runs `node --test` |
+| `test` | `npm test` | Runs `node --test` on the files named `*.test.ts` |
+| `end-to-end safety` | `npm run e2e:safety` | Local only, never in CI. Needs the `claude` command, signed in. Runs the plugin's code with the real AI model and writes to the test board, never the live list. It removes its own rows. Made-up secrets only. Ends with `PASS`, `FAIL` or `INCONCLUSIVE` (run it again) |
 | `build board` | `npm run build:board` | Compiles the board's files. CI runs it on every pull request |
 | `verify PR` | CI workflow | Typecheck, board build and test. The test step runs the abilities check with the `claude` command |
 | `verify release` | Does not apply | Nothing is packaged or published from this repository yet |
