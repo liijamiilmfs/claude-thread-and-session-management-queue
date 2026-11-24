@@ -37,8 +37,8 @@ The type file is `mods/types/claude-code.d.ts` in `anthropics/claude-code` (REF-
 - **FCT-202**: A mod's command runs with no approval prompt. Mods admin page: "`$.fs` and `$.process` calls can skip permission rules and `PreToolUse` hooks", and `$.process.run` "Starts programs as the user".
 - **FCT-203**: `$.session.machine()` gives `sysname`: "`Linux`, `Darwin`; `Windows_NT` on Windows". It is read inside Claude Code "with no program run".
 - **FCT-204**: `$.http.fetch` and `$.fs` exist. This record does not allow them.
-- **FCT-205**: A pane. `$.ui.open({ id, title })` "Opens a pane, a framed region the surface places and this plugin draws by hooking `ui.render` for `{ component: "Pane" }`". The elements come from `$.ui.resolve(e)`. A `Button` takes `onPress`. A button's children may be text only: "Children of strings and `Text` ... any other element is refused". `$.ui.invalidate("ui.render")` draws again. `$.ui.panes()` "Lists this plugin's own open panes".
-- **FCT-206**: A drawing has limits. Mods reference, limits table: "Elements and text children in one tree | 20,000" and "Text in one tree | The first 100,000 characters are drawn".
+- **FCT-205**: A pane. `$.ui.open({ id, title })` "Opens a pane, a framed region the surface places and this plugin draws by hooking `ui.render` for `{ component: "Pane" }`". The elements come from `$.ui.resolve(e)`. A `Button` takes `onPress`. A button's children may be text only: "Children of strings and `Text` ... any other element is refused". `$.ui.invalidate("ui.render")` renders again. `$.ui.panes()` "Lists this plugin's own open panes".
+- **FCT-206**: A rendered pane has limits. Mods reference, limits table: "Elements and text children in one tree | 20,000" and "Text in one tree | The first 100,000 characters are drawn".
 - **FCT-207**: A command. `$.command.register({ name, description })` "Declares the slash command `/<name>` for this session". A `command.run` hook serves it.
 - **FCT-208**: `$.tool.call` is the same call as in ADR-0001 CTX-031: "The check opens no dialog and asks no classifier: every ask becomes an allow". So the panel's read shows Josh no prompt.
 - **FCT-209**: A module may call the global `h` to build an element. Type file: "The JSX factory ... JSX compiles to bare `h(...)` calls". So the module can stay a `.ts` file with no JSX in it.
@@ -56,7 +56,7 @@ Step one was find-out only: no code in the repository. Claude Code 2.1.330, desk
 - **FCT-216**: The read does not land in the session's transcript. The answer was about 250,000 characters and the saved transcript of that run was 22,267 bytes.
 - **FCT-217**: `$.session.machine()` gave `sysname: "Windows_NT"`. `rundll32.exe` is at `C:\WINDOWS\System32\rundll32.exe`.
 - **FCT-218**: `thread-queue`, loaded in a local session, writes no row. `CLAUDE_CODE_REMOTE_SESSION_ID` is not set there, and with no thread id that module does nothing (ADR-0001 R9). This settles the draft's OPEN-202.
-- **FCT-219**: A throwaway module shaped like this record (a `.ts` file that calls `h`, the three hooks and every call of Section 3 but `$.clock.after`) passed `claude plugin validate`. In Claude Code's own test host (`claude plugin test`) the pane was drawn for the terminal and for the desktop app, a press handed the three fixed words to `$.process.run`, and the timer fired. Throwaway code, kept outside the repository.
+- **FCT-219**: A throwaway module shaped like this record (a `.ts` file that calls `h`, the three hooks and every call of Section 3 but `$.clock.after`) passed `claude plugin validate`. In Claude Code's own test host (`claude plugin test`) the pane was rendered for the terminal and for the desktop app, a press handed the three fixed words to `$.process.run`, and the timer fired. Throwaway code, kept outside the repository.
 - **FCT-220**: Not documented, as far as the writer could find: the `claude://claude.ai/code/` link form (Anthropic) and the `url.dll,FileProtocolHandler` entry (Microsoft). The desktop app itself hands out links that start `claude://claude.ai/` for local sessions, so the start is the app's own.
 
 ## Decision
@@ -71,7 +71,7 @@ Nothing changes in the board page, in the stored rows, or in the `thread-queue` 
 
 ### 2. Panel rules
 
-- **P1, what it shows.** One read gives the newest 500 rows on the board. From those, the newest row of each cloud thread, newest first, at most 50 threads. Each shows title, project, state, age and preview. If more threads were found than shown, one line says how many. Fifty rows of at most 600 characters each stay well inside the drawing's limits (FCT-206).
+- **P1, what it shows.** One read gives the newest 500 rows on the board. From those, the newest row of each cloud thread, newest first, at most 50 threads. Each shows title, project, state, age and preview. If more threads were found than shown, one line says how many. Fifty rows of at most 600 characters each stay well inside those limits (FCT-206).
 - **P2, how it reads (trust point).** One call, written out in full in one place: tool `ArtifactData`, action `query`, the board's address, collection `turns`, newest first, at most 500 rows. The function that makes the call takes nothing from its caller, so no value from a row or from any other part of the code can reach the call. It uses the sign-in the app already has. No key, no password, no network call of our own. Josh sees no prompt for it (FCT-208).
 - **P3, rows are not trusted.** Agents wrote them. From each row the panel takes six fields and nothing else: `thread`, `title`, `project`, `state`, `updated_at`, `preview`. Every other field is ignored, the row's `url` included.
   - A row is shown only if all of these hold. `thread` is `session_` and then letters and digits, at most 64 characters in all (ADR-0001 R11). `updated_at` is a time that can be read. `title` is text of 1 to 200 characters. `preview` is text of 0 to 200 characters. `project` is missing or text of up to 200 characters. `state` is `needs_you`, `review`, `finished` or `failed`.
@@ -111,7 +111,7 @@ What each is for:
 |---|---|
 | `session.start`, `$.command.register`, `$.session.machine` | Register `/thread-queue`, on Windows only |
 | `command.run`, `$.ui.open` | Open the pane when Josh types the command |
-| `ui.render`, `$.ui.resolve`, `$.ui.invalidate` | Draw the pane, and draw it again after a read or a press |
+| `ui.render`, `$.ui.resolve`, `$.ui.invalidate` | Render the pane, and render it again after a read or a press |
 | `$.tool.call` | The one read (P2) |
 | `$.process.run`, `$.session.machine` | The one command (P5) |
 | `$.clock.every`, `$.ui.panes` | Read again every 2 minutes, only while the pane is open |
@@ -216,7 +216,7 @@ External facility mappings, added to ADR-0001 Section 6:
 
 The planning thread's draft is `thread-queue/adr-0002-draft.md` in the Claude project's shared folder. The Panel brief says the writer puts step one's answers in place of every "to prove" line. Beyond that, these differ:
 
-1. **The abilities list** (Section 3). Added, because the pane cannot be opened or drawn without them: hooks `session.start` and `command.run`, calls `$.command.register` and `$.ui.resolve`. Added for the refresh and the age: `$.ui.panes`, `$.clock.now`. Dropped, because nothing needs them: the `ui.press` hook and `$.ui.log`.
+1. **The abilities list** (Section 3). Added, because the pane cannot be opened or rendered without them: hooks `session.start` and `command.run`, calls `$.command.register` and `$.ui.resolve`. Added for the refresh and the age: `$.ui.panes`, `$.clock.now`. Dropped, because nothing needs them: the `ui.press` hook and `$.ui.log`.
 2. **P1.** The draft said "the 500 rows the board keeps". The board keeps up to 25,000 (ADR-0001 IMP-005). The panel reads the newest 500 and shows at most 50 threads.
 3. **P2.** The draft asked for a compare of the four fixed things right before the read. The read is now written out in one place that takes no input, so there is nothing a compare could catch. A test checks the written call instead.
 4. **P3.** The draft left out a row with any unknown field. The board itself adds `seen_at` to a row Josh has clicked, so that rule would hide every row he has opened. Unknown fields are ignored and never used.
@@ -266,7 +266,7 @@ The planning thread's draft is `thread-queue/adr-0002-draft.md` in the Claude pr
 
 - **IMP-201**: Step one, the find-out, is done (FCT-212 to FCT-220).
 - **IMP-202**: If the read stops working without a key, a stored sign-in or a network call of our own: stop and ask Josh. Do not switch to another way of reading.
-- **IMP-203**: `AGENTS.md` changes with this record: the overview, the scope line on local sessions, the panel's file table, the reviewer's rules and the second abilities check.
+- **IMP-203**: Two files change with this record. `AGENTS.md`, the rules card: the scope lines on local sessions and the panel's safety lines. `docs/writing-or-reviewing-code.md`: the panel's file list, the reviewer's rules and the second abilities check.
 - **IMP-204**: Tests, one per rule P1 to P10, beside each file. For P5: a hostile id, a hostile title, a row with a link of its own, a machine that is not Windows. In each, the words handed to `$.process.run` are exactly the fixed ones, or no command runs.
 - **IMP-205**: Done is Josh's own press on the PC.
 - **IMP-206**: Tests run with `npm test`, as the first plugin's do. The module is tested with a stand-in for `$` that records every call.
@@ -276,7 +276,7 @@ The planning thread's draft is `thread-queue/adr-0002-draft.md` in the Claude pr
 ## Open, not proven
 
 - **OPEN-201**: Josh's own press (IMP-205). FCT-212 is strong but indirect.
-- **OPEN-202**: Whether a pane drawn by this module looks right in the desktop app. Claude Code's test host drew it (FCT-219). Nobody has seen it on screen.
+- **OPEN-202**: Whether a pane rendered by this module looks right in the desktop app. Claude Code's test host rendered it (FCT-219). Nobody has seen it on screen.
 - **OPEN-203**: Whether reading 500 rows every 2 minutes ever meets a limit (NEG-210).
 
 ## References
