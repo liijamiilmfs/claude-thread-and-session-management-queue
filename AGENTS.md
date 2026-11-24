@@ -1,6 +1,7 @@
 # Thread Queue: the rules card
 
 Thread Queue: a board of Josh's Claude cloud project threads, and a plugin that writes each finished turn to it.
+Planned under `RUL-3224` (ADR-0002): a second plugin, the panel, that shows the same list inside the desktop app.
 Every line here is a hard rule. Read it all before any work. It is short on purpose.
 
 ## Agent routing contract
@@ -20,7 +21,10 @@ Keep this section and its link, because the script looks for the link.
 - The branch `claude/project-thread-5rsmom` holds the live-tested build (T8) and is never merged.
 - Do not add a role, folder, dependency or hosted service the ADR does not name. Change the ADR first.
 - The row rules are the product. Do not change one without a Linear issue that says so.
-- Out of scope until a new ADR says otherwise: local sessions, extra notifications, a live "working" state on the board.
+- Out of scope until a new ADR says otherwise: local sessions as rows in the list, extra notifications, a live "working" state on the board.
+- The panel shows the list of cloud threads inside a local session (ADR-0002). It adds no local session to the list.
+- The panel is for Josh's Windows PC only. Mac and Linux are out of scope until a new ADR says otherwise.
+- Josh accepts ADR-0002 by merging the pull request that adds it. Write no panel code before that merge.
 - Out of scope until a new ADR says otherwise: any hosted service, a network rule change in a cloud environment.
 - Out of scope until a new ADR says otherwise: a second place to record turns (the Milestone 3 safety net).
 - TypeScript. Plain JavaScript is not acceptable.
@@ -58,6 +62,15 @@ Keep this section and its link, because the script looks for the link.
 - The only `$.model` use is the one call of the safety check.
 - That call sends the cleaned title and preview of one row and nothing else.
 - Adding any of these, or any other tool call, is a trust boundary change: stop and ask Josh.
+- The lines above are about the `thread-queue` module. The panel is a second plugin with its own list (ADR-0002, Section 3).
+- The panel runs one fixed local command with no approval prompt (ADR-0002, P5). No text from a row may reach it.
+- The panel reads the board with one fixed call and the sign-in the desktop app already has (ADR-0002, P2).
+- The panel never writes to the board, stores nothing, and logs no row text.
+- The panel uses no `$.http`, `$.fs`, `$.store`, `$.env`, `$.model`, `$.mcp`, `$.agent`, `$.prompt` or `$.process.spawn`.
+- Adding any of these to the panel, another command or another tool call is a trust boundary change: stop and ask Josh.
+- If the panel's read ever needs a key, a stored sign-in or a network call of our own: stop and ask Josh.
+- The panel's abilities stay out of `thread-queue`. `panel/` is never in the zip that cloud threads load.
+- The panel is never uploaded on the account Plugins page.
 - A row holds the thread id, title, project name, state, time, a one-line preview and a link.
 - A row also holds the build version and the safety marks `check` and `dropped`.
 - Do not store or log prompts, full replies or tool input.
@@ -97,6 +110,7 @@ Keep this section and its link, because the script looks for the link.
 
 ## When you do this, open that first
 - Writing or reviewing code: `docs/writing-or-reviewing-code.md`. Every time.
+- Writing or reviewing panel code: also `docs/adr/adr-0002-thread-list-panel.md`. Every time.
 - Changing or checking a row rule or a board rule: `docs/changing-row-or-board-rules.md`. Every time.
 - Changing the safety check, or running `npm run e2e:safety`: `docs/changing-the-safety-check.md`. Every time.
 - A thread leaves no row, or the module seems not to run: `docs/troubleshooting-the-turnstile.md`.

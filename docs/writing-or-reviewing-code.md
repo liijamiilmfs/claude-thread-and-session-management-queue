@@ -17,6 +17,12 @@ Open this before you write or review code, or check a layer rule.
   - `board/connector.ts`: Connector
   - `board/transformer.ts`: Transformer
   - `board/model.ts`: Model
+- Panel files (ADR-0002, Section 4), built under `RUL-3224`. No panel code exists before ADR-0002 is merged. The panel follows the same policy the same way: every `$` call in one file, in sections marked by role comments.
+  - `panel/.claude-plugin/plugin.json`: Manifest (not governed)
+  - `panel/hooks/hooks.json`: Points Claude Code at the module (not governed)
+  - `panel/hooks/register.ts`: Sections: Composition Root, Controller, Service, Manager, Gateway, Connector
+  - `panel/hooks/transformer.ts`: Transformer: the board tool's raw answer to checked rows
+  - `panel/hooks/rows.ts`: The Service's rules (its owned support) and Model
 - Reporting must be enforced by code. An instruction that asks threads to report is not acceptable, because agents skip instructions.
 - The word is "rendering", not "drawing", for what the board puts on screen (2026-11-22 13:09Z): "I think rendering is a better word than drawing."
 
@@ -52,6 +58,22 @@ Open this before you write or review code, or check a layer rule.
 - The browser timer (`setTimeout`): `board/client.ts` only, for the "still trying" text after 10 seconds
 - `build` comes from a constant in `hooks/register.ts`. A test fails when it differs from the version in `.claude-plugin/plugin.json`.
 - Release check: the zip is built from a merged commit and its checksum is recorded. After the upload, the checksum of the file that reached a thread's machine is compared with it, as T8 did.
+
+## Rules a reviewer checks for the panel
+From ADR-0002, rules P1 to P10.
+- The command has three fixed words: `C:\Windows\System32\rundll32.exe`, `url.dll,FileProtocolHandler`, and the link. The link is `claude://claude.ai/code/` plus a thread id. The thread id is the only part that varies, and only an id of `session_` and then letters and digits gets through.
+- No text from a row reaches `$.process.run`. No link stored in a row is ever used.
+- `$.process.run(` appears once, in the Connector section. Right before it, the Connector compares all three words with its own fixed values. It runs only after a press, only on `Windows_NT`, one command for one press.
+- `$.tool.call(` appears once, in the Connector section, written out in full: `ArtifactData`, `query`, the board's address, `turns`. The function that makes it takes nothing from its caller.
+- The panel never writes to the board. No `set`, `update`, `delete` or `batch` appears.
+- Only `panel/hooks/rows.ts` makes a checked command, a branded type. The Gateway's and the Connector's run functions accept nothing else. No cast to it appears outside `panel/hooks/rows.ts`.
+- The raw answer of the read goes from the Connector through the Manager into `panel/hooks/transformer.ts`. The Service section only ever holds checked rows.
+- `panel/hooks/rows.ts` imports nothing. `panel/hooks/transformer.ts` imports only types from `panel/hooks/rows.ts`. Neither holds a `$` or reads a clock.
+- The Service section passes `$` on and never calls anything on it. The Controller calls only the Service.
+- Off Windows the panel registers no command, opens no pane and reads nothing.
+- The panel has its own abilities check, against the list in ADR-0002 Section 3. `thread-queue`'s abilities list does not change. Adding an ability to either needs its ADR changed first.
+- `panel/` is never in the zip that cloud threads load, and the panel is never uploaded on the account Plugins page.
+- The panel stores nothing, logs no row text, and makes no network call of its own.
 
 ## TypeScript rules
 - Types are removed, not compiled, so use only syntax that can be removed: no enums, no namespaces, no parameter properties.
