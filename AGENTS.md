@@ -15,9 +15,15 @@ Thread Queue gives Josh one list of his Claude cloud project threads across all 
 - **The board**: one private Artifact page with a small built-in database. One row per finished turn.
 - **The plugin** (`thread-queue`): a Claude Code plugin with one hooks module. Each time a thread tells the person something, the module's own code writes the thread's row to the board. The thread's model writes nothing, and no turn is ever blocked.
 
+A third part is planned under `RUL-3224` (ADR-0002):
+
+- **The panel** (`thread-queue-panel`): a second plugin, in `panel/`, for local Code sessions on Josh's Windows PC only. It shows the same list in a pane inside the desktop app. A press on a row opens that thread in the app. It only reads the board. Cloud threads never load it.
+
 TypeScript. Plain JavaScript is not acceptable. Claude Code loads the module's `.ts` files directly, so the plugin has no build step. The board's files are compiled with `tsc` when the board is published.
 
 Status: building Milestone 1. `docs/adr/adr-0001-thread-queue-architecture.md` was Accepted on 2026-11-22, and Josh approved Milestone 1 the same day. Write code only under an issue Josh has approved, at its approved tier. The row rules are in `hooks/row.ts` with their tests. Milestone 2 is not approved. Milestone 0 evidence is in the Claude project's shared folder under `thread-queue/m0-evidence/`. The live-tested build (T8) is on branch `claude/project-thread-5rsmom`, which is never merged. An older plain JavaScript prototype sits under `thread-queue/prototype/`.
+
+`docs/adr/adr-0002-thread-list-panel.md` covers the panel. Josh accepts it by merging the pull request that adds it. No panel code exists yet. It is built under `RUL-3224`, after that merge.
 
 ## Issue tracking
 
@@ -101,6 +107,32 @@ Rules a reviewer checks:
 - Only `expired()` in `board/service.ts` makes an `ExpiredIds`, and the delete functions accept nothing else. No shipped board file casts to it, uses `any`, or switches a type check off.
 - `board/service.ts` reads no clock. `board/main.ts` hands it one. A row is deleted only by the rules in ADR-0001 IMP-005: age from the earlier of the device clock and the newest row, at most 200 deletes per page load, no delete without a readable time.
 - Do not add a role, a folder, a dependency or a hosted service the ADR does not name. Change the ADR first.
+
+Panel files (ADR-0002, Section 4), built under `RUL-3224`. The panel follows the same policy the same way: every `$` call in one file, in sections marked by role comments.
+
+| File | Role |
+|---|---|
+| `panel/.claude-plugin/plugin.json` | Manifest (not governed) |
+| `panel/hooks/hooks.json` | Points Claude Code at the module (not governed) |
+| `panel/hooks/register.ts` | Sections: Composition Root, Controller, Service, Manager, Gateway, Connector |
+| `panel/hooks/transformer.ts` | Transformer: the board tool's raw answer to checked rows |
+| `panel/hooks/rows.ts` | The Service's rules (its owned support) and Model |
+
+Rules a reviewer checks for the panel (ADR-0002, rules P1 to P10):
+
+- The command has three fixed words: `C:\Windows\System32\rundll32.exe`, `url.dll,FileProtocolHandler`, and the link. The link is `claude://claude.ai/code/` plus a thread id. The thread id is the only part that varies, and only an id of `session_` and then letters and digits gets through.
+- No text from a row reaches `$.process.run`. No link stored in a row is ever used.
+- `$.process.run(` appears once, in the Connector section. Right before it, the Connector compares all three words with its own fixed values. It runs only after a press, only on `Windows_NT`, one command for one press.
+- `$.tool.call(` appears once, in the Connector section, written out in full: `ArtifactData`, `query`, the board's address, `turns`. The function that makes it takes nothing from its caller.
+- The panel never writes to the board. No `set`, `update`, `delete` or `batch` appears.
+- Only `rows.ts` makes a checked command, a branded type. The Gateway's and the Connector's run functions accept nothing else. No cast to it appears outside `rows.ts`.
+- The raw answer of the read goes from the Connector through the Manager into `panel/hooks/transformer.ts`. The Service section only ever holds checked rows.
+- `panel/hooks/rows.ts` imports nothing. `panel/hooks/transformer.ts` imports only types from `rows.ts`. Neither holds a `$` or reads a clock.
+- The Service section passes `$` on and never calls anything on it. The Controller calls only the Service.
+- Off Windows the panel registers no command, opens no pane and reads nothing.
+- The panel has its own abilities check, against the list in ADR-0002 Section 3. `thread-queue`'s abilities list does not change. Adding an ability to either needs its ADR changed first.
+- `panel/` is never in the zip that cloud threads load, and the panel is never uploaded on the account Plugins page.
+- The panel stores nothing, logs no row text, and makes no network call of its own.
 
 TypeScript rules:
 
@@ -189,13 +221,16 @@ Proposed, mirroring the Rule 0 Softworks platform repository. Confirm with Josh 
 - The module's board write runs with no approval prompt and without Anthropic's own safety check. Josh does not accept a write with no check at all (ADR-0001, CTX-039), so the plugin's own safety check runs on every row. Do not ship a build that writes rows without it, and do not weaken it.
 - The module makes no network call of its own, holds no secret, and uses no `$.http`, `$.process`, `$.fs`, `$.env.set`, `$.prompt`, `$.session`, `$.agent` or `$.model.fork`. Its only `$.model` use is the one call of the safety check, which sends the cleaned title and preview of one row and nothing else (Josh approved this trust boundary change on 2026-11-22). Adding any of these, or any other tool call, is a trust boundary change: stop and ask Josh.
 - The plugin's note (`$.store`) holds only the rows still waiting: at most 500 (20 in a build made before `RUL-3185`), each a thread id, time, state and preview, and the count of dropped rows. The note never holds text a code rule hid. Text the model later hides sits there until its row is written. The module's `$.ui.log` lines also land in the thread's `/tmp/claude-code.log`, with row ids and up to 200 characters of error text. Nothing else is written to disk.
+- The panel (ADR-0002) runs one local command with no approval prompt, and reads the board with the sign-in the desktop app already has. Its only `$.process` use is the one `$.process.run` of rule P5, and its only tool call is the one read of rule P2. It uses no `$.http`, `$.fs`, `$.store`, `$.env`, `$.model`, `$.mcp`, `$.agent`, `$.prompt` or `$.process.spawn`. Adding any of these, another command or another tool call is a trust boundary change: stop and ask Josh.
+- If the panel's read ever needs a key, a stored sign-in or a network call of our own: stop and ask Josh.
 - No secrets belong in this repository.
 
 ## Scope boundaries
 
 Out of scope until a new ADR says otherwise:
 
-- Local sessions.
+- Local sessions as rows in the list. The panel shows the list of cloud threads inside a local session (ADR-0002). It adds no local session to the list.
+- The panel on Mac or Linux.
 - Any hosted service, or a network rule change in a cloud environment.
 - A second place to record turns (the Milestone 3 safety net).
 - A live "working" state on the board.
