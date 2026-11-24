@@ -17,7 +17,7 @@ Open this before you write or review code, or check a layer rule.
   - `board/connector.ts`: Connector
   - `board/transformer.ts`: Transformer
   - `board/model.ts`: Model
-- Panel files (ADR-0002, Section 4), built under `RUL-3224`. No panel code exists before ADR-0002 is merged. The panel follows the same policy the same way: every `$` call in one file, in sections marked by role comments.
+- Panel files (ADR-0002, Section 4), built under `RUL-3224`. The panel follows the same policy the same way: every `$` call in one file, in sections marked by role comments.
   - `panel/.claude-plugin/plugin.json`: Manifest (not governed)
   - `panel/hooks/hooks.json`: Points Claude Code at the module (not governed)
   - `panel/hooks/register.ts`: Sections: Composition Root, Controller, Service, Manager, Gateway, Connector
@@ -87,4 +87,6 @@ From ADR-0002, rules P1 to P10.
 
 ## Audit
 - Audit is a code review against ADR-0001. There is no automated architecture check. Compare the `claude plugin validate .` list with ADR-0001 Section 3.
+- For the panel, compare the `claude plugin validate panel` list with ADR-0002 Section 3. `panel/hooks/abilities.test.ts` makes that compare and `panel/hooks/source.test.ts` checks the text of the panel's files.
+- `panel/hooks/transformer.ts` reads only the lines between the tool's own begin and end marks, and only when their number equals the tool's own count. Otherwise the answer is unreadable (ADR-0002, P9).
 - The lasting list: hooks `tool.call` on the nine R1 tools and `turn.complete`; calls `$.clock.after`, `$.clock.now`, `$.env.get`, `$.mcp.call`, `$.store.get`, `$.store.set`, `$.tool.call`, `$.ui.log`, and one model call for R13, `$.model.complete` or `$.model.classify`, exactly one of the two (OPEN-008); env reads `CLAUDE_CODE_REMOTE_SESSION_ID`; env writes nothing.

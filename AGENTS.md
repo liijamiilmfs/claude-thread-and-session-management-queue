@@ -1,7 +1,7 @@
 # Thread Queue: the rules card
 
 Thread Queue: a board of Josh's Claude cloud project threads, and a plugin that writes each finished turn to it.
-Planned under `RUL-3224` (ADR-0002): a second plugin, the panel, that shows the same list inside the desktop app.
+A second plugin, the panel (`panel/`, ADR-0002), shows the same list inside the desktop app on Josh's Windows PC.
 Every line here is a hard rule. Read it all before any work. It is short on purpose.
 
 ## Agent routing contract
@@ -24,7 +24,7 @@ Keep this section and its link, because the script looks for the link.
 - Out of scope until a new ADR says otherwise: local sessions as rows in the list, extra notifications, a live "working" state on the board.
 - The panel shows the list of cloud threads inside a local session (ADR-0002). It adds no local session to the list.
 - The panel is for Josh's Windows PC only. Mac and Linux are out of scope until a new ADR says otherwise.
-- Josh accepts ADR-0002 by merging the pull request that adds it. Write no panel code before that merge.
+- ADR-0002 was accepted on 2026-11-24. Change it before changing what the panel may do.
 - Out of scope until a new ADR says otherwise: any hosted service, a network rule change in a cloud environment.
 - Out of scope until a new ADR says otherwise: a second place to record turns (the Milestone 3 safety net).
 - TypeScript. Plain JavaScript is not acceptable.
@@ -101,8 +101,8 @@ Keep this section and its link, because the script looks for the link.
 - Run tests and the type check on Node 24.22.3.
 - Do not rely on a machine's default `node`.
 - Run `npm test` (Node's built-in test runner, files named `*.test.ts`) and `npm run typecheck`.
-- Lint with `claude plugin validate .`. Needs the `claude` command.
-- CI installs version 2.1.330, checked against a recorded hash, and the abilities test runs that exact file (`CLAUDE_BIN`).
+- Lint with `claude plugin validate .` and `claude plugin validate panel`. Needs the `claude` command.
+- CI installs version 2.1.330, checked against a recorded hash, and both abilities tests run that exact file (`CLAUDE_BIN`).
 - In CI a missing command fails the run.
 - On other machines the test reports itself as skipped.
 - Build the board with `npm run build:board`. It compiles the board's files. CI runs it on every pull request.
@@ -113,7 +113,7 @@ Keep this section and its link, because the script looks for the link.
 - Writing or reviewing panel code: also `docs/adr/adr-0002-thread-list-panel.md`. Every time.
 - Changing or checking a row rule or a board rule: `docs/changing-row-or-board-rules.md`. Every time.
 - Changing the safety check, or running `npm run e2e:safety`: `docs/changing-the-safety-check.md`. Every time.
-- A thread leaves no row, or the module seems not to run: `docs/troubleshooting-the-turnstile.md`.
+- A thread leaves no row, the module seems not to run, or the panel misbehaves: `docs/troubleshooting-the-turnstile.md`.
 - Finding the layers policy, which is not copied here: `docs/adr/adr-0001-thread-queue-architecture.md`. Section 4.
 
 Last checked: 2026-11-23. The old rules and the reasons behind them: the git history of `AGENTS.md`, and `docs/adr/adr-0001-thread-queue-architecture.md`.
