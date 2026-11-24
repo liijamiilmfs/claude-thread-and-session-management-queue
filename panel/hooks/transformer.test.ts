@@ -39,6 +39,8 @@ test('P3: a row that fails is left out and counted', () => {
   const bad: unknown[] = [
     { ...good, thread: 'session_a b" & calc.exe "' }, { ...good, thread: 'cse_017RufJU7YSX5i3PXEWfCe3h' }, { ...good, thread: 'session_' + 'a'.repeat(57) }, { ...good, thread: 7 },
     { ...good, updated_at: 'yesterday' }, { ...good, updated_at: 1795513035000 }, { ...good, updated_at: '2026-13-45T99:99:99Z' }, { ...good, updated_at: undefined },
+    // Times a looser reader would take: no time of day, another format, no zone, a space for the T.
+    { ...good, updated_at: '2026-11-24' }, { ...good, updated_at: 'Tue, 24 Nov 2026 09:37:15 GMT' }, { ...good, updated_at: '2026-11-24T09:37:15' }, { ...good, updated_at: '2026-11-24 09:37:15Z' },
     { ...good, title: '' }, { ...good, title: 'x'.repeat(201) }, { ...good, title: ['a'] }, { ...good, title: '\u200B\u202E' },
     { ...good, preview: 'x'.repeat(201) }, { ...good, preview: null }, { ...good, project: 'x'.repeat(201) }, { ...good, project: 5 },
     { ...good, state: 'working' }, { ...good, state: 'REVIEW' }, { ...good, state: undefined },
@@ -47,6 +49,18 @@ test('P3: a row that fails is left out and counted', () => {
   const out = read(good, ...bad);
   assert.equal(out.rows.length, 1);
   assert.equal(out.leftOut, bad.length);
+});
+
+// From the review of pull request 21: this check of the thread id is the row check's own, so it needs its own proof.
+test('P3: a thread id that is not session_ and then 1 to 56 letters and digits is left out', () => {
+  const ids: unknown[] = ['', 'session_', 'Session_abc', 'SESSION_abc', 'xsession_abc', ['session_abc'], { toString: 'session_abc' }];
+  for (let code = 0; code < 0x3000; code++) {
+    const ch = String.fromCharCode(code);
+    if (!/[A-Za-z0-9]/.test(ch)) ids.push('session_a' + ch + 'b', 'session_ab' + ch, ch + 'session_ab', 'session_' + ch);
+  }
+  const out = read(...ids.map((thread) => ({ ...good, thread })));
+  assert.deepEqual(out.rows.map((r) => JSON.stringify(r.thread)), []);
+  assert.equal(out.leftOut, ids.length);
 });
 
 test('P3: a line that is not a doc with data is left out and counted', () => {
@@ -76,6 +90,15 @@ test('only the lines between the marks of one answer are read', () => {
   assert.equal(readRows(layout([line(good), stray], 1)), 'unreadable');
   // No begin mark while docs are listed: unreadable.
   assert.equal(readRows(layout([line(good)], 1, '', END)), 'unreadable');
+  // No end mark and nothing after the row: unreadable, not "read to the end".
+  const cut = layout([line(good)]);
+  cut.answer.text = ['1 documents', BEGIN, line(good)].join('\n');
+  assert.equal(readRows(cut), 'unreadable');
+  // Two pairs of marks: the first pair is the list. A second pair after it is not read.
+  const twice = layout([line(good)]);
+  twice.answer.text += '\n=== BEGIN ARTIFACT DB 0badc0de x ===\n' + stray + '\n=== END ARTIFACT DB 0badc0de ===';
+  const first = readRows(twice);
+  assert.deepEqual(first === 'unreadable' ? first : first.rows.map((r) => r.thread), [good.thread]);
 });
 
 test('P3: text is cleaned before its length is checked', () => {

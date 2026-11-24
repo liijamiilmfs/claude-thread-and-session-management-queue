@@ -202,6 +202,20 @@ test('P5: a machine that is not Windows at the press runs nothing and says so', 
   assert.match(await shown(), /Windows only/);
 });
 
+// From the review of pull request 21: the read checks the machine itself, wherever it is called from.
+test('P5: a machine that is not Windows at a refresh or at the timer reads nothing', async () => {
+  const { w, command, press, every, settle, reads, rowKeys } = await world({ board: () => board(stored(A, 1)) });
+  await command();
+  assert.equal(reads.length, 1);
+  w.sysname = 'Linux';
+  await press('refresh');
+  every[0]!.fn();
+  await settle();
+  assert.equal(reads.length, 1);
+  // The rows it had stay.
+  assert.deepEqual(await rowKeys(), ['open:' + A]);
+});
+
 // The compare right before the run is the Connector's own code with its own fixed values. No input can make the words differ,
 // so each fault is put into a throwaway copy of the source: the rule's words stay right and the Connector's own value is changed.
 test('P5: when a word differs from the Connector\'s own value, nothing runs', async () => {

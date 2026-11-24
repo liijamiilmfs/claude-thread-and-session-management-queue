@@ -3,7 +3,7 @@
 // It only reads the board, and it runs one fixed command. It stores nothing and logs nothing.
 // Every `$` call lives in this file. Each section below starts with a comment naming its role (ADR-0002, Section 4).
 import { STATE_LABELS, age, newestPerThread, openCommand } from './rows.ts';
-import type { CheckedCommand, RawRead, Read, Row } from './rows.ts';
+import type { CheckedCommand, RawRead, Read, Row, View } from './rows.ts';
 
 type Args = Record<string, unknown>;
 type Timer = { cancel(): void };
@@ -87,7 +87,10 @@ async function onTick($: Api): Promise<void> {
   ticking = undefined;
 }
 
+// Every read comes through here: the command, the timer and the Refresh button. Off Windows it reads nothing (P5),
+// wherever it was called from.
 async function onRefresh($: Api): Promise<void> {
+  if ((await machineName($)) !== 'Windows_NT') return;
   try {
     await refresh($, await $.clock.now());
   } catch {
@@ -123,8 +126,6 @@ async function onRender($: Api, e: unknown): Promise<unknown> {
 
 // ---- Service: the conductor. It holds what the pane shows and decides the order of steps. ----
 // The rules are functions in rows.ts. It passes `$` on and never calls anything on it. It only ever holds checked rows.
-
-type View = { lines: string[]; rows: { thread: string; title: string; detail: string; preview: string }[] };
 
 let rows: Row[] = [];
 let leftOut = 0;

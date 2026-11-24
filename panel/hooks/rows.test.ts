@@ -39,6 +39,17 @@ test('P4: any other id gives no command', () => {
   assert.ok(openCommand('session_' + 'a'.repeat(56), 'Windows_NT'));
 });
 
+// From the review of pull request 21: the list above never tried one odd character inside an otherwise good id.
+test('P4: one character that is not a letter or a digit, anywhere in the id, gives no command', () => {
+  for (let code = 0; code < 0x3000; code++) {
+    const ch = String.fromCharCode(code);
+    if (/[A-Za-z0-9]/.test(ch)) continue;
+    for (const id of ['session_a' + ch + 'b', 'session_ab' + ch, ch + 'session_ab', 'session_' + ch]) {
+      assert.equal(openCommand(id, 'Windows_NT'), undefined, JSON.stringify(id));
+    }
+  }
+});
+
 test('P5: off Windows there is no command', () => {
   for (const sysname of ['Linux', 'Darwin', '', 'windows_nt', 'Windows_NT ', 'Windows', undefined, null, 1]) {
     assert.equal(openCommand('session_017RufJU7YSX5i3PXEWfCe3h', sysname), undefined, String(sysname));

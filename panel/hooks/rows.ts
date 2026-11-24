@@ -9,6 +9,8 @@ export type Row = { thread: string; title: string; project: string; state: strin
 export type RawRead = { answer: unknown };
 // What the Transformer hands back: checked rows, and how many rows failed the check.
 export type Read = { rows: Row[]; leftOut: number } | 'unreadable';
+// What the pane shows: a few status lines, and one entry per thread with its text ready to render.
+export type View = { lines: string[]; rows: { thread: string; title: string; detail: string; preview: string }[] };
 // The one command, checked. Only openCommand() below makes one, and the run functions accept nothing else.
 declare const builtByTheRule: unique symbol;
 type Command = { readonly argv: readonly [string, string, string] };
