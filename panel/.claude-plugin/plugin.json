@@ -1,0 +1,5 @@
+{
+  "name": "thread-queue-panel",
+  "version": "0.1.0",
+  "description": "Shows the Thread Queue list in a pane inside the desktop app. Windows only. Local sessions only."
+}

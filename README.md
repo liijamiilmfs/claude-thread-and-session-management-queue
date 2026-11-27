@@ -42,6 +42,32 @@ Not available yet. Planned steps:
 
 Open the pinned board. Work the Priority section from the top.
 
+## The panel in the desktop app
+
+A second plugin, for a Windows PC only. It shows the same list in a pane inside the Claude desktop app. A press on a row opens that thread in the app, not in a browser tab. It only reads the board. The design is in `docs/adr/adr-0002-thread-list-panel.md`.
+
+Install it once:
+
+1. Copy the folder `panel/` from a merged commit to a folder of its own, outside any checkout of this repository. For example `C:\Users\<you>\claude-plugins\thread-queue-panel`.
+2. Set the user variable `CLAUDE_CODE_PLUGIN_DIRS` to that folder's full path. If the variable already names a folder, add this one after a `;`.
+3. Restart the desktop app, so it sees the variable.
+
+Use it:
+
+1. In a local Code session, type `/thread-queue`. The pane opens and reads the list.
+2. Press a row to open its thread in the app.
+3. Press Refresh to read the list again. It also reads again every 2 minutes while the pane is open.
+
+Its limits:
+
+- Windows only. On any other machine it does nothing.
+- It needs a session the desktop app started. In a plain terminal session it says the list could not be read.
+- It shows the newest row of at most 50 threads, from the newest 500 rows. The board shows them all.
+- A press in the pane does not clear the row from Priority on the board.
+- Never upload it on the account Plugins page. Cloud threads must not load it.
+- It rests on three things Anthropic and Microsoft have not documented: the link that opens a thread in the app, the Windows entry that runs the link, and the layout of the list's answer. If one changes, the pane says so in one line and nothing else breaks.
+- To update it, copy `panel/` again from a newer merged commit.
+
 ## Configuration
 
 None. Plugin settings do not reach cloud threads, so the board's address is fixed in the plugin's code.
@@ -60,6 +86,7 @@ Agent and contributor rules are in `AGENTS.md`.
 | `docs/agent-routing-contract.md` | A synced copy of the Rule 0 Softworks routing contract. Do not edit it here. |
 | `.claude-plugin/`, `hooks/` | The plugin. The row rules and their tests are in `hooks/row.ts`. `hooks/register.ts` is an empty shell until the safety check is wired in. |
 | `board/` | The board page: `index.html` and one TypeScript file per layer, started by `main.ts` |
+| `panel/` | The panel plugin for the Windows desktop app. Its rules are in `panel/hooks/rows.ts`, its row check in `panel/hooks/transformer.ts` |
 
 ## Limits
 

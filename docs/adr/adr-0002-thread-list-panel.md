@@ -1,6 +1,6 @@
 ---
 title: "ADR-0002: The thread list as a panel inside the desktop app"
-status: "Proposed"
+status: "Accepted"
 date: "2026-11-24"
 authors: "Josh (adoption owner and approver)"
 tags: ["architecture", "decision", "claude-code-plugin", "trust-boundary"]
@@ -12,9 +12,15 @@ superseded_by: ""
 
 ## Status
 
-**Proposed** | Accepted | Rejected | Superseded | Deprecated
+Proposed | **Accepted** | Rejected | Superseded | Deprecated
 
-Josh accepts this record by merging the pull request that adds it (the Panel brief, approved 2026-11-24). The code's pull request then changes this line to Accepted, with the merge date. No panel code exists before that merge.
+Josh accepted this record on 2026-11-24 at 12:35Z by merging pull request 20, which added it. The panel's code came after that merge.
+
+Changed on 2026-11-24 under `RUL-3224`, in the pull request that adds the code. Josh accepts the change by merging that pull request:
+
+- FCT-215 was wrong and is corrected. The rows do not come in the structured part of the read's answer. They come as text lines. A live check with the finished row check found it.
+- So the layout of that text is a third undocumented piece. P9, FCT-220 and NEG-202 now say three. If the layout changes, the pane says the list cannot be read and shows nothing new. It does not guess.
+- No ability, no call and no rule of P1 to P8 or P10 changed.
 
 Issue: `RUL-3224`. This record adds to ADR-0001. It changes nothing in ADR-0001's row rules, the board page, the stored rows, or the `thread-queue` plugin.
 
@@ -52,12 +58,16 @@ Step one was find-out only: no code in the repository. Claude Code 2.1.330, desk
 - **FCT-212**: The press. The command `C:\WINDOWS\System32\rundll32.exe url.dll,FileProtocolHandler claude://claude.ai/code/session_017RufJU7YSX5i3PXEWfCe3h` ran once and ended with exit code 0. Before it, the app showed Josh's local session. After it, the app showed a session that is not a local one. Nobody looked at the screen, so Josh's own press stays the last proof (IMP-205).
 - **FCT-213**: The read. A plugin module in a local session called `$.tool.call` with tool `ArtifactData`, action `query`, the board's address and collection `turns`. It got 500 rows. No key, nothing stored, no network call of our own. This settles the draft's FCT-207.
 - **FCT-214**: The limit of FCT-213. The board's tool is there only in a session the desktop app starts. In a plain terminal session the same call fails with `no tool named "ArtifactData" in this session`.
-- **FCT-215**: The answer's shape: `result.db_read.docs`, a list of `{ id, data, version, updatedAt }`. `data` holds the row. One call with newest first and a limit of 500 gives one page.
+- **FCT-215**: The answer's shape, corrected on 2026-11-24 after a live check with the finished row check. One call with newest first and a limit of 500 gives one page.
+  - `result.db_read` holds `op`, `collection`, `ordered_by` and `docs`, a list of `{ id, data, version, updatedAt }`. In it every `data` is empty.
+  - The rows are in `text`: a count line, a begin mark, one JSON line per doc with its `data` filled in, an end mark, and a note. The two marks carry the same short id, which was different on each read.
+  - Step one's report said `data` holds the row. It had read that from the text, not from the structured part.
+  - The live check, counts only: 500 lines, 500 rows passed the row check, none left out, 68 threads.
 - **FCT-216**: The read does not land in the session's transcript. The answer was about 250,000 characters and the saved transcript of that run was 22,267 bytes.
 - **FCT-217**: `$.session.machine()` gave `sysname: "Windows_NT"`. `rundll32.exe` is at `C:\WINDOWS\System32\rundll32.exe`.
 - **FCT-218**: `thread-queue`, loaded in a local session, writes no row. `CLAUDE_CODE_REMOTE_SESSION_ID` is not set there, and with no thread id that module does nothing (ADR-0001 R9). This settles the draft's OPEN-202.
 - **FCT-219**: A throwaway module shaped like this record (a `.ts` file that calls `h`, the three hooks and every call of Section 3 but `$.clock.after`) passed `claude plugin validate`. In Claude Code's own test host (`claude plugin test`) the pane was rendered for the terminal and for the desktop app, a press handed the three fixed words to `$.process.run`, and the timer fired. Throwaway code, kept outside the repository.
-- **FCT-220**: Not documented, as far as the writer could find: the `claude://claude.ai/code/` link form (Anthropic) and the `url.dll,FileProtocolHandler` entry (Microsoft). The desktop app itself hands out links that start `claude://claude.ai/` for local sessions, so the start is the app's own.
+- **FCT-220**: Not documented, as far as the writer could find: the `claude://claude.ai/code/` link form (Anthropic), the `url.dll,FileProtocolHandler` entry (Microsoft), and the layout of the read's answer (Anthropic, FCT-215). The desktop app itself hands out links that start `claude://claude.ai/` for local sessions, so the start is the app's own.
 
 ## Decision
 
@@ -92,7 +102,9 @@ Nothing changes in the board page, in the stored rows, or in the `thread-queue` 
 - **P6, read only.** The panel never writes to the board. No `set`, no update, no delete. It does not mark a row seen.
 - **P7, kept apart.** The panel's abilities live in `thread-queue-panel` only. The abilities list of `thread-queue` does not change. Each plugin has its own abilities check. The panel is never uploaded on the account Plugins page and is never put in the zip that cloud threads load.
 - **P8, when something fails.** The list cannot be read, or gives no answer in 15 seconds: the pane says so in one line and keeps the rows it had, marked as old. The command fails or runs out of time: one line says so. One read runs at a time. Neither can stop or slow the session: the command that opens the pane does not wait for the read.
-- **P9, two undocumented pieces (trust point).** The link form and the Windows entry `url.dll,FileProtocolHandler` (FCT-220). Each is one fixed value in one file. If an app update or a Windows update breaks one, a press does nothing and Josh sees that at once. Nothing else breaks. The fix is that value.
+- **P9, three undocumented pieces (trust point).** The link form, the Windows entry `url.dll,FileProtocolHandler`, and the layout of the read's answer (FCT-220).
+  - The link form and the Windows entry are each one fixed value in `panel/hooks/rows.ts`, with the Connector's own copy for the compare of P5 in `panel/hooks/register.ts`. If an app update or a Windows update breaks one, a press does nothing and Josh sees that at once. Nothing else breaks. A fix changes both places.
+  - The layout is read in one file, `panel/hooks/transformer.ts`. It reads only the lines between the tool's own begin and end marks, and only when their number equals the tool's own count. A row's text cannot add a line: a line break inside it arrives escaped. If the layout changes, the pane says the list cannot be read. It never shows a row it could not check.
 - **P10, nothing kept.** The panel stores nothing on disk, holds no secret and logs no row text. Rows live in memory while the session runs.
 
 How often it reads (settles the draft's OPEN-203): when the pane is opened, on a press of the Refresh button, and every 2 minutes while the pane is open. When the pane is closed the timer stops at its next tick.
@@ -201,7 +213,7 @@ External facility mappings, added to ADR-0001 Section 6:
 ### Negative
 
 - **NEG-201**: The project now has code that runs a local command with no approval prompt (FCT-202). That is a new kind of risk, held down by P4, P5 and the two checks.
-- **NEG-202**: Two pieces are undocumented (P9). An app update or a Windows update can break the press.
+- **NEG-202**: Three pieces are undocumented (P9). An app update or a Windows update can break the press, and a change to the layout of the read's answer can stop the list from showing.
 - **NEG-203**: Windows only. On another machine the panel does nothing.
 - **NEG-204**: The panel needs a local Code session that the desktop app started (FCT-214). In a plain terminal session it opens and says the list cannot be read.
 - **NEG-205**: A press in the panel does not mark the row seen, so "Priority" on the board page does not follow it.
@@ -276,7 +288,7 @@ The planning thread's draft is `thread-queue/adr-0002-draft.md` in the Claude pr
 ## Open, not proven
 
 - **OPEN-201**: Josh's own press (IMP-205). FCT-212 is strong but indirect.
-- **OPEN-202**: Whether a pane rendered by this module looks right in the desktop app. Claude Code's test host rendered it (FCT-219). Nobody has seen it on screen.
+- **OPEN-202**: Whether a pane rendered by this module looks right in the desktop app. Claude Code's test host rendered the finished module for the terminal and for the desktop app, in a throwaway test outside the repository. Nobody has seen it on screen.
 - **OPEN-203**: Whether reading 500 rows every 2 minutes ever meets a limit (NEG-210).
 
 ## References
